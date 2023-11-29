@@ -6,7 +6,7 @@ using Unity.Jobs;
 
 namespace DH2.Algorithm
 {
-    public struct BVHTree : IDisposable, ICloneable
+    public struct TopLevelAccelerateStructure : IDisposable
     {
         private NativeArray<BoundingVolumeHierarchy.Node> Nodes; // The nodes of the bounding volume
         private BoundingVolumeHierarchy BoundingVolumeHierarchy;
@@ -48,18 +48,7 @@ namespace DH2.Algorithm
             m_BodyCount = 0;
             m_BranchCount = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.ClearMemory);
         }
-
-        public object Clone()
-        {
-            var clone = new BVHTree();
-            clone.Nodes = new NativeArray<BoundingVolumeHierarchy.Node>(Nodes.Length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            clone.Nodes.CopyFrom(Nodes);
-            clone.m_BranchCount = new NativeArray<int>(1, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            clone.BranchCount = BranchCount;
-            clone.m_BodyCount = BodyCount;
-            return clone;
-        }
-
+        
         public void Dispose()
         {
             if (Nodes.IsCreated)

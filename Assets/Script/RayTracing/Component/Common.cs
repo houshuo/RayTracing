@@ -12,8 +12,5 @@ namespace Script.RayTracing
         public BlobArray<int3> triangles;
     }
     
-    public struct BottomLevelAccelerateStructure
-    {
-        public BlobArray<BoundingVolumeHierarchy.Node> Nodes; // The nodes of the bounding volume
-    }
+    
 }
