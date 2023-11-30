@@ -7,9 +7,8 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
-using static DH2.Algorithm.Math;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     // A 4-way bounding volume hierarchy
     public struct BoundingVolumeHierarchy
@@ -140,10 +139,10 @@ namespace DH2.Algorithm
             static void ComputeAxisAndPivot(ref Range range, out int axis, out float pivot)
             {
                 // Compute axis and pivot.
-                axis = IndexOfMaxComponent(range.Domain.Extents);
+                axis = Math.IndexOfMaxComponent(range.Domain.Extents);
                 pivot = ((range.Domain.Min + range.Domain.Max) / 2)[axis];
             }
-
+            
             static void SplitRange(ref Range range, int size, ref Range lRange, ref Range rRange)
             {
                 lRange.Start = range.Start;

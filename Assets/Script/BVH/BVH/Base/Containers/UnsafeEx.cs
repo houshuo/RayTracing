@@ -1,6 +1,6 @@
 using Unity.Collections.LowLevel.Unsafe;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     internal static class UnsafeEx
     {

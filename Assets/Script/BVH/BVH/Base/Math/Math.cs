@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     // Common math helper functions
     [DebuggerStepThrough]

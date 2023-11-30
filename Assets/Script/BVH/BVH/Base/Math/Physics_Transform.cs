@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using Unity.Mathematics;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     public static partial class Math
     {

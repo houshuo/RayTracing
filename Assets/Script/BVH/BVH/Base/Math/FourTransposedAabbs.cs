@@ -1,6 +1,6 @@
 ﻿using Unity.Mathematics;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     // 4 transposed AABBs
     public struct FourTransposedAabbs

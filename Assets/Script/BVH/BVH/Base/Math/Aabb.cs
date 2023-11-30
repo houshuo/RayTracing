@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     // An axis aligned bounding box
     [DebuggerDisplay("{Min} - {Max}")]

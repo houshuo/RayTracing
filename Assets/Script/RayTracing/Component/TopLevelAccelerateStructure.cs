@@ -1,10 +1,8 @@
 ﻿using System;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
-using Unity.Mathematics;
 using Unity.Jobs;
 
-namespace DH2.Algorithm
+namespace Script.RayTracing
 {
     public struct TopLevelAccelerateStructure : IDisposable
     {
@@ -62,17 +60,9 @@ namespace DH2.Algorithm
             }
         }
 
-        public JobHandle ScheduleBuildTree(NativeArray<Aabb> treeNodes, JobHandle deps = new JobHandle())
+        public JobHandle ScheduleBuildTree(NativeArray<Aabb> aabbs, NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex, JobHandle deps = new JobHandle())
         {
-            BodyCount = treeNodes.Length;
-            NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex = new NativeArray<BoundingVolumeHierarchy.PointAndIndex>(BodyCount, Allocator.TempJob);
-            NativeArray<Aabb> aabbs = new NativeArray<Aabb>(BodyCount, Allocator.TempJob);
-            for (int i = 0; i < BodyCount; i++)
-            {
-                pointAndIndex[i] = new BoundingVolumeHierarchy.PointAndIndex() { Index = i, Position = treeNodes[i].Center };
-                aabbs[i] = treeNodes[i];
-            }
-            
+            BodyCount = aabbs.Length;
             return BoundingVolumeHierarchy.ScheduleBuildJobs(pointAndIndex, aabbs, 8, deps, NodeCount, m_BranchCount);
         }
     }
