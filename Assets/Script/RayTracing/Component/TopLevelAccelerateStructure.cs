@@ -6,8 +6,8 @@ namespace Script.RayTracing
 {
     public struct TopLevelAccelerateStructure : IDisposable
     {
-        private NativeArray<BoundingVolumeHierarchy.Node> Nodes; // The nodes of the bounding volume
-        private BoundingVolumeHierarchy BoundingVolumeHierarchy;
+        public NativeArray<BoundingVolumeHierarchy.Node> Nodes; // The nodes of the bounding volume
+        private BoundingVolumeHierarchy bvh;
         
         private int m_BodyCount;
         public int BodyCount
@@ -17,7 +17,7 @@ namespace Script.RayTracing
         }
 
         private int m_NodeCount;
-        private int NodeCount
+        public int NodeCount
         {
             get => m_NodeCount;
             set
@@ -33,13 +33,13 @@ namespace Script.RayTracing
                         [1] = BoundingVolumeHierarchy.Node.Empty
                     };
                     
-                    BoundingVolumeHierarchy = new BoundingVolumeHierarchy(Nodes);
+                    bvh = new BoundingVolumeHierarchy(Nodes);
                 }
             }
         }
 
         private NativeArray<int> m_BranchCount;
-        public int BranchCount { get => m_BranchCount[0]; set => m_BranchCount[0] = value; }
+        public int BranchCount { get => m_BranchCount[0]; }
 
         public void Init()
         {
@@ -63,7 +63,7 @@ namespace Script.RayTracing
         public JobHandle ScheduleBuildTree(NativeArray<Aabb> aabbs, NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex, JobHandle deps = new JobHandle())
         {
             BodyCount = aabbs.Length;
-            return BoundingVolumeHierarchy.ScheduleBuildJobs(pointAndIndex, aabbs, 8, deps, NodeCount, m_BranchCount);
+            return bvh.ScheduleBuildJobs(pointAndIndex, aabbs, 8, deps, NodeCount, m_BranchCount);
         }
     }
 }

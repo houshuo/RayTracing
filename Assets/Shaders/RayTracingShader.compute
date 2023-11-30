@@ -78,21 +78,6 @@ float3 SampleHemisphere(float3 normal)
 }
 
 /*=============Supported Object Geometries================*/
-struct Sphere {
-    float3 center;
-    float radius;
-    float3 albedo;
-    float3 specular;
-    float3 emission;
-};
-
-
-// scene objects
-float3 _GroundAlbedo;
-float3 _GroundSpecular;
-float3 _GroundEmission;
-StructuredBuffer<Sphere> _Spheres;
-const int _NumSpheres;
 
 // Triangle meshes
 StructuredBuffer<float3> _Vertices;
@@ -175,50 +160,6 @@ RayHit CreateRayHit()
 }
 
 /*=============Intersection Functions================*/
-// sphere defined as (x, y, z, radius)
-void IntersectSphere(Ray ray, inout RayHit bestHit, Sphere sphere)
-{
-    // ref: https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
-    float3 d = ray.origin - sphere.center;  // direction from ray origin to sphere
-    float b = dot(ray.direction, d);
-    float c = dot(d, d) - (sphere.radius * sphere.radius);
-
-    // evaluate quadratic determinant
-    float det_squared = (b*b) - c;
-    if (det_squared < 0)
-        return;  // no real solutions
-    float det = sqrt(det_squared);
-    float t = -b - det; 
-    if (t < 0)
-        t = -b + det;
-    if (t > 0 && t < bestHit.distance)
-    {
-        bestHit.distance = t;
-        bestHit.position = ray.origin + t * ray.direction;
-        bestHit.normal = normalize(bestHit.position - sphere.center);
-        bestHit.specular = sphere.specular;
-        bestHit.albedo = sphere.albedo;
-        bestHit.emission = sphere.emission;
-    }
-}
-
-// TODO: change to generic plane isection test
-void IntersectGroundPlane(Ray ray, inout RayHit bestHit)
-{
-    // Calculate distance along the ray where the ground plane is intersected
-    float t = -ray.origin.y / ray.direction.y;
-    if (t > 0 && t < bestHit.distance)
-    {
-        bestHit.distance = t;
-        bestHit.position = ray.origin + t * ray.direction;
-        bestHit.normal = float3(0.0f, 1.0f, 0.0f);
-
-        bestHit.albedo = _GroundAlbedo;
-        bestHit.specular = _GroundSpecular;
-        bestHit.emission = _GroundEmission;
-    }
-}
-
 struct Trisect {
     float t;
     float u;
@@ -405,19 +346,7 @@ void IntersectBVH(Ray ray, inout RayHit bestHit) {
 RayHit Trace(Ray ray) // populate bestHit
 {
     RayHit bestHit = CreateRayHit();
-    IntersectGroundPlane(ray, bestHit);
-
-    // loop over all spheres
-    for (int i = 0; i < _NumSpheres; i++)
-        IntersectSphere(ray, bestHit, _Spheres[i]);
-
-    #ifdef BRUTE_FORCE
-        IntersectAllTris(ray, bestHit);
-    #else
-        IntersectBVH(ray, bestHit);
-    #endif
-
-    
+    IntersectBVH(ray, bestHit);
     return bestHit;
 }
 
@@ -425,49 +354,6 @@ float3 Shade(inout Ray ray, inout RayHit hit)
 {
     if (hit.distance < 1.#INF)
     {
-        // for gold:
-        // float3 specular = float3(1.0f, 0.78f, 0.34f); // surface absorbs green and blue light, leaving gold color
-            // for more physically-based values: https://blog.selfshadow.com/publications/s2015-shading-course/#course_content
-
-        // Reflect the ray and multiply energy with specular reflection
-            // offset along normal to prevent re-colliding at same spot
-        // ray.origin = hit.position + hit.normal * 0.001f; 
-
-        // // TODO: implement multipple hemisphere sampling here, rather than in addshader
-        // float3 reflected = reflect(ray.direction, hit.normal);
-        // ray.direction = SampleHemisphere(hit.normal);
-        
-        // // TODO: add phong reflectance specular exponent here?
-        // // ray.energy *= hit.specular;  // specular component
-        // // ray.energy *= 2 * hit.albedo * sdot(hit.normal, ray.direction);  // for ideal diffuse material
-        // // return 0.0f;  // diffuse materials do not emit light, 
-        //     // the light to be reflected off this surface is factored into ray.energy
-
-        // float3 diffuse = 2 * min(1.0f - hit.specular, hit.albedo);
-        // float alpha = 15.0f;
-        // float3 specular = hit.specular * (alpha + 2) * pow(sdot(ray.direction, reflected), alpha);
-        // ray.energy *= (diffuse + specular) * sdot(hit.normal, ray.direction);
-        // return 0.0f;
-
-        // // TODO: add ambient material lighting
-
-        // /* shadows */
-        // Ray shadowRay = CreateRay(hit.position + hit.normal * 0.001f, -1 * _DirectionalLight.xyz);
-        // RayHit shadowHit = Trace(shadowRay);
-        // if (shadowHit.distance != 1.#INF)
-        // {
-        //     // TODO: implement soft shadows / area lights
-        //     return float3(0.0f, 0.0f, 0.0f); // hard shadows for point light
-        // }
-
-        // // diffuse component
-        //     // TODO: can add normal mapping here
-        //     // TODO: add specular component here, or is this already captured in ray.energy?
-        // return saturate(-dot(hit.normal, _DirectionalLight.xyz)) * _DirectionalLight.w * hit.albedo;  
-
-        // Return the normal
-        // return hit.normal * 0.5f + 0.5f;
-
         // Roulette shading copied from: http://three-eyed-games.com/2018/05/12/gpu-path-tracing-in-unity-part-2/
         hit.albedo = min(1.0f - hit.specular, hit.albedo);
         float specChance = energy(hit.specular);
@@ -520,10 +406,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     // Transform pixel to [-1,1] range
         // jittered ray sample, random(0-1, 0-1) _PixelOffset
     float2 uv = float2((id.xy + _PixelOffset) / float2(width, height) * 2.0f - 1.0f);
-
-    int numTraces = 1;  // if camera is locked, can increase this?
-    float3 aggregateResult = float3(0.0f, 0.0f, 0.0f);
-
+    
     // Get a ray from the UVs
     Ray ray = CreateCameraRay(uv);  
 

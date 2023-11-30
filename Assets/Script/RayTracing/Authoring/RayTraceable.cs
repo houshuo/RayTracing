@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using Unity.Collections;
 using UnityEngine;
 using Unity.Entities;
-using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace Script.RayTracing
 {
+    [RequireComponent(typeof(MeshFilter))]
+    [DisallowMultipleComponent]
     public class RayTraceable : MonoBehaviour
     {
         public Color albedo, specular, emission;
@@ -19,16 +20,27 @@ namespace Script.RayTracing
                 //Get Mesh
                 MeshFilter meshFilter = authoring.GetComponent<MeshFilter>();
                 Mesh mesh = meshFilter.sharedMesh;
+                if(mesh == null)
+                    return;
                 var vertices = mesh.vertices;
                 var verticesCount = vertices.Length;
+                var normals = mesh.normals;
+                var normalCount = normals.Length;
                 //Build TriangleMesh
                 BlobBuilder meshBlobBuilder = new BlobBuilder(Allocator.Temp);
                 ref TriangleMesh triangleMesh = ref meshBlobBuilder.ConstructRoot<TriangleMesh>();
                 BlobBuilderArray<float3> verticesBuilder =
-                    meshBlobBuilder.Allocate(ref triangleMesh.vertices, vertices.Length);
+                    meshBlobBuilder.Allocate(ref triangleMesh.vertices, verticesCount);
                 for (int i = 0; i < verticesCount; i++)
                 {
                     verticesBuilder[i] = vertices[i];
+                }
+                
+                BlobBuilderArray<float3> normalBuilder =
+                    meshBlobBuilder.Allocate(ref triangleMesh.normals, normalCount);
+                for (int i = 0; i < normalCount; i++)
+                {
+                    normalBuilder[i] = normals[i];
                 }
 
                 var indices = mesh.GetIndices(0);
@@ -47,7 +59,7 @@ namespace Script.RayTracing
                 var meshResult = meshBlobBuilder.CreateBlobAssetReference<TriangleMesh>(Allocator.Persistent);
                 meshBlobBuilder.Dispose();
 
-                //Build BLAS
+                //Build BLAS Inputs
                 NativeArray<Aabb> aabbs = new NativeArray<Aabb>(trianglesCount, Allocator.TempJob);
                 NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex =
                     new NativeArray<BoundingVolumeHierarchy.PointAndIndex>(trianglesCount, Allocator.TempJob);
@@ -62,19 +74,28 @@ namespace Script.RayTracing
                     pointAndIndex[i] = new BoundingVolumeHierarchy.PointAndIndex()
                         { Index = i, Position = aabbs[i].Center };
                 }
-
+                
+                //Build BVH
+                int sketchNodeCount = trianglesCount + BoundingVolumeHierarchy.Constants.MaxNumTreeBranches;
+                NativeArray<BoundingVolumeHierarchy.Node> sketch =
+                    new NativeArray<BoundingVolumeHierarchy.Node>(sketchNodeCount, Allocator.Temp);
+                var bvh = new BoundingVolumeHierarchy(sketch);
+                bvh.Build(pointAndIndex, aabbs, out int nodeCount, true);
+                
+                //Build BLAS BlobAssetReference
                 BlobBuilder blasBlobBuilder = new BlobBuilder(Allocator.Temp);
                 ref BottomLevelAccelerateStructure blas =
                     ref blasBlobBuilder.ConstructRoot<BottomLevelAccelerateStructure>();
-                int nodeCount = trianglesCount + BoundingVolumeHierarchy.Constants.MaxNumTreeBranches;
                 BlobBuilderArray<BoundingVolumeHierarchy.Node> blasNodesBuilder =
                     blasBlobBuilder.Allocate(ref blas.Nodes, nodeCount);
-                var bvh = new BoundingVolumeHierarchy((BoundingVolumeHierarchy.Node*)blasNodesBuilder.GetUnsafePtr());
-                bvh.Build(pointAndIndex, aabbs, out int nodeCountOutput, true);
-                blas.NodeCount = nodeCountOutput;
+                for (int i = 0; i < nodeCount; i++)
+                {
+                    blasNodesBuilder[i] = sketch[i];
+                }
                 var blasResult =
                     blasBlobBuilder.CreateBlobAssetReference<BottomLevelAccelerateStructure>(Allocator.Persistent);
                 blasBlobBuilder.Dispose();
+                sketch.Dispose();
 
                 //Add Entity
                 var entity = GetEntity(TransformUsageFlags.Renderable);

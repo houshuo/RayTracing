@@ -6,7 +6,6 @@ namespace Script.RayTracing
     {
         public BlobArray<BoundingVolumeHierarchy.Node> Nodes; // The nodes of the bounding volume
 
-        public int NodeCount;
         public Aabb Aabb
         {
             get => Nodes[1].Bounds.GetCompoundAabb();

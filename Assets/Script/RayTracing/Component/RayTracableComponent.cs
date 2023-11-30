@@ -10,6 +10,7 @@ namespace Script.RayTracing
     public struct TriangleMesh
     {
         public BlobArray<float3> vertices;
+        public BlobArray<float3> normals;
         public BlobArray<int3> triangles;
     }
     
