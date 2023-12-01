@@ -14,7 +14,7 @@ namespace Script.RayTracing
         {
             public int randomSeed;
             public ComputeShader RayTracingShader;
-            public Texture[] SkyBoxTextures;
+            public Texture SkyBoxTextures;
             public bool SkyboxEnabled = true;
             
             public int MaxReflections = 2;
@@ -54,7 +54,7 @@ namespace Script.RayTracing
             {
                 RTWidth = (int)(cameraTextureDescriptor.width / settings.RTDownScaling);
                 RTHeight = (int)(cameraTextureDescriptor.height / settings.RTDownScaling);
-                cmd.GetTemporaryRT(ShaderIDs.RayTracingResult, RTWidth, RTHeight, 0, FilterMode.Bilinear);
+                cmd.GetTemporaryRT(ShaderIDs.RayTracingResult, RTWidth, RTHeight, 0, FilterMode.Bilinear, RenderTextureFormat.Default, RenderTextureReadWrite.Default, 1, true);
             }
 
             private void SetShaderParametersPerUpdate(BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
@@ -81,21 +81,21 @@ namespace Script.RayTracing
                 // // tri mesh mats
                 // // update every frame to allow for hot reloading of material
                 // UpdateTriMeshMats();
-                
+                cmd.SetComputeTextureParam(settings.RayTracingShader, 0, "_SkyboxTexture", settings.SkyBoxTextures);
                 cmd.SetComputeBufferParam(settings.RayTracingShader, 0, "_TALSBuffer", buildAccelerateStructureSystem.TLASBuffer);
             }
             
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 var buildAccelerateStructureSystem = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<BuildAccelerateStructureSystem>();
-                if (buildAccelerateStructureSystem == null)
+                if (buildAccelerateStructureSystem == null || buildAccelerateStructureSystem.EmptyScene)
                     return;
                 
                 CommandBuffer cmd = CommandBufferPool.Get(profilerTag);
                 // Set the target and dispatch the compute shader
                 SetShaderParametersPerUpdate(buildAccelerateStructureSystem, cmd);
                 cmd.SetComputeTextureParam(settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
-                cmd.DispatchCompute(settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
+                // cmd.DispatchCompute(settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
                 // use _converged because destination is not destination is not HDR texture
                 cmd.Blit(ShaderIDs.RayTracingResult, source); 
                 context.ExecuteCommandBuffer(cmd);

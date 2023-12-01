@@ -3,6 +3,7 @@ using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
@@ -10,8 +11,10 @@ using UnityEngine;
 namespace Script.RayTracing
 {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public partial class BuildAccelerateStructureSystem : Unity.Entities.SystemBase
+    public partial class BuildAccelerateStructureSystem : SystemBase
     {
+        public bool EmptyScene = false;
+        
         private TopLevelAccelerateStructure TLAS;
         //PerObjects BVH
         public ComputeBuffer ObjectsBVHOffsetBuffer;
@@ -31,13 +34,12 @@ namespace Script.RayTracing
         //TLAS Buffer
         public ComputeBuffer TLASBuffer;
         
-        protected void OnCreate(ref Unity.Entities.SystemState state)
+        protected override void OnCreate()
         {
             TLAS = new TopLevelAccelerateStructure();
             TLAS.Init();
         }
-
-        [Unity.Burst.BurstCompile]
+        
         protected override void OnUpdate()
         {
             //Query RayTraceable
@@ -46,7 +48,9 @@ namespace Script.RayTracing
                 .Build();
             var rayTraceables =
                 rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(WorldUpdateAllocator);
-            if (rayTraceables.Length == 0)
+
+            EmptyScene = rayTraceables.Length == 0;
+            if (EmptyScene)
                 return;
             
             //Calculate total nodes and build BLAS offsets
@@ -112,9 +116,9 @@ namespace Script.RayTracing
             buildTLASJob.blasMaterials = ObjectsMaterialBuffer.BeginWrite<RayTraceMaterial>(0, rayTraceables.Length);
             PrepareComputeBuffer(ref ObjectsWorldToLocalBuffer, rayTraceables.Length, 16 * sizeof(float));
             buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer.BeginWrite<float4x4>(0, rayTraceables.Length);
-            Dependency = buildTLASJob.ScheduleParallel(rayTraceableQuery, Dependency);
+            var jobHandle = buildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
             //build TLAS
-            TLAS.ScheduleBuildTree(aabbs, pointAndIndices, Dependency);
+            TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle).Complete();
             Dependency.Complete();
             //set TLAS to compute shader
             ObjectsBVHOffsetBuffer.EndWrite<int>(rayTraceables.Length);
@@ -130,7 +134,7 @@ namespace Script.RayTracing
             ObjectsTrianglesBuffer.EndWrite<int3>(totalTrianglesCount);
             
             ObjectsMaterialBuffer.EndWrite<RayTraceMaterial>(rayTraceables.Length);
-            ObjectsMaterialBuffer.EndWrite<float4x4>(rayTraceables.Length);
+            ObjectsWorldToLocalBuffer.EndWrite<float4x4>(rayTraceables.Length);
             
             PrepareComputeBuffer(ref TLASBuffer, TLAS.NodeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoundingVolumeHierarchy.Node)));
             NativeArray<BoundingVolumeHierarchy.Node> tlasNativeArray = TLASBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, TLAS.NodeCount);
@@ -138,7 +142,7 @@ namespace Script.RayTracing
             TLASBuffer.EndWrite<BoundingVolumeHierarchy.Node>(TLAS.NodeCount);
         }
 
-        protected void OnDestroy(ref Unity.Entities.SystemState state)
+        protected override void OnDestroy()
         {
             TLAS.Dispose();
             DestroyComputeBuffer(ref ObjectsBVHOffsetBuffer);
