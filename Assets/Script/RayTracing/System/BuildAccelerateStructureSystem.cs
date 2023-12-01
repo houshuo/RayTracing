@@ -46,6 +46,9 @@ namespace Script.RayTracing
                 .Build();
             var rayTraceables =
                 rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(WorldUpdateAllocator);
+            if (rayTraceables.Length == 0)
+                return;
+            
             //Calculate total nodes and build BLAS offsets
             int totalBVHNodeCount = 0;
             int totalVerticesCount = 0;
@@ -161,7 +164,7 @@ namespace Script.RayTracing
             
             if (buffer == null)
             {
-                buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured, ComputeBufferMode.Dynamic);
+                buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured, ComputeBufferMode.SubUpdates);
             }
         }
 

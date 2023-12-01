@@ -17,14 +17,10 @@ namespace Script.RayTracing
             public Texture[] SkyBoxTextures;
             public bool SkyboxEnabled = true;
             
-            public Camera _camera;
-            
             public int MaxReflections = 2;
             public int maxReflectionsLocked = 4;
             public int maxReflectionsUnlocked = 2;
 
-            /*======Lighting======*/
-            public Light directionalLight;
             public float RTDownScaling;
         }
 
@@ -61,7 +57,7 @@ namespace Script.RayTracing
                 cmd.GetTemporaryRT(ShaderIDs.RayTracingResult, RTWidth, RTHeight, 0, FilterMode.Bilinear);
             }
 
-            private void SetShaderParametersPerUpdate(CommandBuffer cmd)
+            private void SetShaderParametersPerUpdate(BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
             {
                 // RayTracingShader.SetMatrix("_CameraToWorld", _camera.cameraToWorldMatrix);
                 // RayTracingShader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
@@ -85,16 +81,19 @@ namespace Script.RayTracing
                 // // tri mesh mats
                 // // update every frame to allow for hot reloading of material
                 // UpdateTriMeshMats();
-
-                var buildAccelerateStructureSystem = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<BuildAccelerateStructureSystem>();
+                
                 cmd.SetComputeBufferParam(settings.RayTracingShader, 0, "_TALSBuffer", buildAccelerateStructureSystem.TLASBuffer);
             }
             
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
+                var buildAccelerateStructureSystem = World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<BuildAccelerateStructureSystem>();
+                if (buildAccelerateStructureSystem == null)
+                    return;
+                
                 CommandBuffer cmd = CommandBufferPool.Get(profilerTag);
                 // Set the target and dispatch the compute shader
-                SetShaderParametersPerUpdate(cmd);
+                SetShaderParametersPerUpdate(buildAccelerateStructureSystem, cmd);
                 cmd.SetComputeTextureParam(settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
                 cmd.DispatchCompute(settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
                 // use _converged because destination is not destination is not HDR texture
@@ -121,8 +120,12 @@ namespace Script.RayTracing
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            scriptablePass.Setup(renderer.cameraColorTargetHandle);
             renderer.EnqueuePass(scriptablePass);
+        }
+        
+        public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
+        {
+            scriptablePass.Setup(renderer.cameraColorTarget);  // use of target after allocation
         }
     }
 }
