@@ -82,22 +82,32 @@ namespace Script.RayTracing
             buildTLASJob.pointAndIndex = pointAndIndices;
             
             buildTLASJob.blasBVHOffsets = blasBVHOffsets;
+            PrepareComputeBuffer(ref ObjectsBVHOffsetBuffer, rayTraceables.Length, sizeof(int));
             buildTLASJob.blasBVHOffsetsCopy = ObjectsBVHOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsBVHBuffer, totalBVHNodeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoundingVolumeHierarchy.Node)));
             buildTLASJob.blasBVHArray = ObjectsBVHBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, totalBVHNodeCount);
             
             buildTLASJob.blasVerticesOffsets = blasVerticesOffsets;
+            PrepareComputeBuffer(ref ObjectsVerticesOffsetBuffer, rayTraceables.Length, sizeof(int));
             buildTLASJob.blasVerticesOffsetsCopy = ObjectsVerticesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsVerticesBuffer, totalVerticesCount, 3 * sizeof(float));
             buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer.BeginWrite<float3>(0, totalVerticesCount);
             
             buildTLASJob.blasNormalsOffsets = blasNormalsOffsets;
+            PrepareComputeBuffer(ref ObjectsNormalsOffsetBuffer, rayTraceables.Length, sizeof(int));
             buildTLASJob.blasNormalsOffsetsCopy = ObjectsNormalsOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsNormalsBuffer, totalNormalsCount, 3 * sizeof(float));
             buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer.BeginWrite<float3>(0, totalNormalsCount);
             
             buildTLASJob.blasTriangleOffsets = blasTriangleOffsets;
+            PrepareComputeBuffer(ref ObjectsTrianglesOffsetBuffer, totalTrianglesCount, sizeof(int));
             buildTLASJob.blasTriangleOffsetsCopy = ObjectsTrianglesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsTrianglesBuffer, totalTrianglesCount, 3 * sizeof(int));
             buildTLASJob.blasTriangleArray = ObjectsTrianglesBuffer.BeginWrite<int3>(0, totalTrianglesCount);
             
+            PrepareComputeBuffer(ref ObjectsMaterialBuffer, rayTraceables.Length, System.Runtime.InteropServices.Marshal.SizeOf(typeof(RayTraceMaterial)));
             buildTLASJob.blasMaterials = ObjectsMaterialBuffer.BeginWrite<RayTraceMaterial>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsWorldToLocalBuffer, rayTraceables.Length, 16 * sizeof(float));
             buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer.BeginWrite<float4x4>(0, rayTraceables.Length);
             Dependency = buildTLASJob.ScheduleParallel(rayTraceableQuery, Dependency);
             //build TLAS
@@ -118,6 +128,8 @@ namespace Script.RayTracing
             
             ObjectsMaterialBuffer.EndWrite<RayTraceMaterial>(rayTraceables.Length);
             ObjectsMaterialBuffer.EndWrite<float4x4>(rayTraceables.Length);
+            
+            PrepareComputeBuffer(ref TLASBuffer, TLAS.NodeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoundingVolumeHierarchy.Node)));
             NativeArray<BoundingVolumeHierarchy.Node> tlasNativeArray = TLASBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, TLAS.NodeCount);
             NativeArray<BoundingVolumeHierarchy.Node>.Copy(TLAS.Nodes, tlasNativeArray, TLAS.NodeCount);
             TLASBuffer.EndWrite<BoundingVolumeHierarchy.Node>(TLAS.NodeCount);
@@ -126,6 +138,39 @@ namespace Script.RayTracing
         protected void OnDestroy(ref Unity.Entities.SystemState state)
         {
             TLAS.Dispose();
+            DestroyComputeBuffer(ref ObjectsBVHOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsBVHBuffer);
+            DestroyComputeBuffer(ref ObjectsVerticesOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsVerticesBuffer);
+            DestroyComputeBuffer(ref ObjectsNormalsOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsNormalsBuffer);
+            DestroyComputeBuffer(ref ObjectsTrianglesOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
+            DestroyComputeBuffer(ref ObjectsMaterialBuffer);
+            DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
+            DestroyComputeBuffer(ref TLASBuffer);
+        }
+
+        private static void PrepareComputeBuffer(ref ComputeBuffer buffer, int count, int stride)
+        {
+            if (buffer != null && (buffer.stride != stride || buffer.count < count))
+            {
+                buffer.Dispose();
+                buffer = null;
+            }
+            
+            if (buffer == null)
+            {
+                buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured, ComputeBufferMode.Dynamic);
+            }
+        }
+
+        private static void DestroyComputeBuffer(ref ComputeBuffer buffer)
+        {
+            if (buffer == null)
+                return;
+            buffer.Dispose();
+            buffer = null;
         }
     }
     

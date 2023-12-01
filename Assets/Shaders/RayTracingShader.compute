@@ -211,38 +211,6 @@ bool Trisection(Ray ray, float3 v0, float3 v1, float3 v2,
     return false;
 }
 
-void IntersectAllTris(Ray ray, inout RayHit bestHit) {
-    for (int i = 0; i < _NumIndices; i += 3) {
-        float3
-            v0 = _Vertices[_Indices[i]],
-            v1 = _Vertices[_Indices[i+1]],
-            v2 = _Vertices[_Indices[i+2]],
-            n0 = _Normals[_Indices[i]],
-            n1 = _Normals[_Indices[i+1]],
-            n2 = _Normals[_Indices[i+2]];
-            
-
-        Trisect tri = CreateTrisect();
-        if (Trisection(ray, v0, v1, v2, tri)) {
-            if (tri.t > bestHit.distance)
-                continue;
-
-            bestHit.distance = tri.t;
-            bestHit.position = ray.origin + tri.t * ray.direction;
-
-            // TODO: use UV to interpolate normals
-            float w = 1 - tri.u - tri.v;
-            bestHit.normal = (tri.u*n1) + (tri.v * n2) + (w * n0);
-            
-            // get mesh mat
-            TriMeshMaterial triMat = _TriMeshMats[_MatIndices[i]];
-            bestHit.albedo = triMat.albedo;
-            bestHit.specular = triMat.specular;
-            bestHit.emission = triMat.emission;
-        }
-    }
-}
-
 // ref: https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
 bool IntersectAABB(Ray r, float3 bot, float3 top, inout float2 t) {
     float tmin, tmax, tymin, tymax, tzmin, tzmax, tmp;
