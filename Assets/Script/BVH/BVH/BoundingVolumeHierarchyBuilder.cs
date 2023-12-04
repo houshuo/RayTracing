@@ -78,10 +78,10 @@ namespace Script.RayTracing
 
         public struct Constants
         {
+            public const int MaxTreeDepth = 63;
             public const int MaxNumTreeBranches = 64;
             public const int SmallRangeSize = 32;
             public const int UnaryStackSize = 256;
-            public const int BinaryStackSize = 512;
         }
 
         public struct PointAndIndex
@@ -100,18 +100,20 @@ namespace Script.RayTracing
             /// </summary>
             public struct Range
             {
-                public Range(int start, int length, int root, Aabb domain)
+                public Range(int start, int length, int root, Aabb domain, int depth)
                 {
                     Start = start;
                     Length = length;
                     Root = root;
                     Domain = domain;
+                    Depth = depth;
                 }
 
                 public int Start;
                 public int Length;
                 public int Root;
                 public Aabb Domain;
+                public int Depth;
             }
 
             void SortRange(int axis, ref Range range)
@@ -393,6 +395,8 @@ namespace Script.RayTracing
 
             public void ProcessLargeRange(Range range, Range* subRanges)
             {
+                for (int i = 0; i < 4; i++)
+                    subRanges[i].Depth = range.Depth + 1;
                 if (!UseSah)
                 {
                     ComputeAxisAndPivot(ref range, out int axis, out float pivot);
@@ -445,7 +449,7 @@ namespace Script.RayTracing
                     {
                         Range range = ranges[--rangeStackSize];
 
-                        if (range.Length <= Constants.SmallRangeSize)
+                        if (range.Depth > Constants.MaxTreeDepth || range.Length <= Constants.SmallRangeSize)
                         {
                             ProcessSmallRange(range, ref FreeNodeIndex);
                         }
@@ -478,7 +482,7 @@ namespace Script.RayTracing
 
         public unsafe JobHandle ScheduleBuildJobs(
             NativeArray<PointAndIndex> points, NativeArray<Aabb> aabbs, /*NativeArray<int> shouldDoWork,*/
-            int numThreadsHint, JobHandle inputDeps, int numNodes, NativeArray<int> numBranches)
+            JobHandle inputDeps, NativeArray<int> numBranches)
         {
             //int oldNumBranches = numBranches[0];
             JobHandle handle = inputDeps;
@@ -494,7 +498,6 @@ namespace Script.RayTracing
                 Ranges = ranges,
                 BranchNodeOffsets = branchNodeOffsets,
                 BranchCount = numBranches,
-                ThreadCount = numThreadsHint,
                 //ShouldDoWork = shouldDoWork
             }.Schedule(handle);
 
@@ -541,7 +544,7 @@ namespace Script.RayTracing
 
                 Aabb aabb = new Aabb();
                 SetAabbFromPoints(ref aabb, (float4*)points.GetUnsafePtr(), points.Length);
-                builder.Build(new Builder.Range(0, points.Length, 1, aabb));
+                builder.Build(new Builder.Range(0, points.Length, 1, aabb, 0));
                 nodeCount = builder.FreeNodeIndex;
 
                 Refit(aabbs, 1, builder.FreeNodeIndex - 1);
@@ -640,7 +643,7 @@ namespace Script.RayTracing
         internal unsafe void BuildFirstNLevels(
             NativeArray<PointAndIndex> points,
             NativeArray<Builder.Range> branchRanges, NativeArray<int> branchNodeOffset,
-            int threadCount, out int branchCount)
+            out int branchCount)
         {
             Builder.Range* level0 = stackalloc Builder.Range[Constants.MaxNumTreeBranches];
             Builder.Range* level1 = stackalloc Builder.Range[Constants.MaxNumTreeBranches];
@@ -649,54 +652,48 @@ namespace Script.RayTracing
 
             Aabb aabb = new Aabb();
             SetAabbFromPoints(ref aabb, (float4*)points.GetUnsafePtr(), points.Length);
-            level0[0] = new Builder.Range(0, points.Length, 1, aabb);
-
-            int largestAllowedRange = math.max(level0[0].Length / threadCount, Constants.SmallRangeSize);
-            int smallRangeThreshold = math.max(largestAllowedRange / threadCount, Constants.SmallRangeSize);
-            int largestRangeInLastLevel;
-            int maxNumBranchesMinusOneSplit = Constants.MaxNumTreeBranches - 3;
+            level0[0] = new Builder.Range(0, points.Length, 1, aabb, 0);
+            int largestRangeInLastLevel = 0;
+            int maxNumBranchesMinusOneSplit = Constants.MaxNumTreeBranches - 4;
             int freeNodeIndex = 2;
 
             var builder = new Builder { Bvh = this, Points = points, UseSah = false };
 
             Builder.Range* subRanges = stackalloc Builder.Range[4];
-
             do
             {
-                largestRangeInLastLevel = 0;
-
                 for (int i = 0; i < level0Size; ++i)
                 {
-                    if (level0[i].Length > smallRangeThreshold && freeNodeIndex < maxNumBranchesMinusOneSplit)
+                    if (level0[i].Depth <= Constants.MaxTreeDepth 
+                        && level0[i].Length > Constants.SmallRangeSize
+                        && level1Size <= maxNumBranchesMinusOneSplit)
                     {
                         // Split range in up to 4 sub-ranges.
-
                         builder.ProcessLargeRange(level0[i], subRanges);
 
+                        // Create nodes for the sub-ranges and append level 1 sub-ranges.
+                        builder.CreateInternalNodes(subRanges, 4, level0[i].Root, level1, ref level1Size, ref freeNodeIndex);
+                        
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[0].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[1].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[2].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[3].Length);
-
-                        // Create nodes for the sub-ranges and append level 1 sub-ranges.
-                        builder.CreateInternalNodes(subRanges, 4, level0[i].Root, level1, ref level1Size, ref freeNodeIndex);
                     }
                     else
                     {
-                        // Too small, ignore.
                         level1[level1Size++] = level0[i];
+                        largestRangeInLastLevel = math.max(largestRangeInLastLevel, level0[i].Length);
                     }
                 }
 
                 Builder.Range* tmp = level0;
                 level0 = level1;
                 level1 = tmp;
-
+                
                 level0Size = level1Size;
                 level1Size = 0;
-                smallRangeThreshold = largestAllowedRange;
-            } while (level0Size < Constants.MaxNumTreeBranches && largestRangeInLastLevel > largestAllowedRange);
-
+            } while (level0Size <= maxNumBranchesMinusOneSplit && largestRangeInLastLevel > Constants.SmallRangeSize);
+            
             RangeSizeAndIndex* rangeMapBySize = stackalloc RangeSizeAndIndex[Constants.MaxNumTreeBranches];
 
             int nodeOffset = freeNodeIndex;
@@ -766,9 +763,7 @@ namespace Script.RayTracing
             public NativeArray<int> BranchNodeOffsets;
             public NativeArray<int> BranchCount;
             //public NativeArray<int> ShouldDoWork;
-
-            public int ThreadCount;
-
+            
             public void Execute()
             {
                 //if (ShouldDoWork[0] == 0)
@@ -780,7 +775,7 @@ namespace Script.RayTracing
                 //}
 
                 var bvh = new BoundingVolumeHierarchy(Nodes);
-                bvh.BuildFirstNLevels(Points, Ranges, BranchNodeOffsets, ThreadCount, out int branchCount);
+                bvh.BuildFirstNLevels(Points, Ranges, BranchNodeOffsets, out int branchCount);
                 BranchCount[0] = branchCount;
             }
         }

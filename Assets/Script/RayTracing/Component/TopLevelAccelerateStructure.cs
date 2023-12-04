@@ -64,7 +64,7 @@ namespace Script.RayTracing
         public JobHandle ScheduleBuildTree(NativeArray<Aabb> aabbs, NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex, JobHandle deps = new JobHandle())
         {
             BodyCount = aabbs.Length;
-            return bvh.ScheduleBuildJobs(pointAndIndex, aabbs, 8, deps, NodeCount, m_BranchCount);
+            return bvh.ScheduleBuildJobs(pointAndIndex, aabbs, deps, m_BranchCount);
         }
     }
 }

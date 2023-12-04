@@ -80,7 +80,7 @@ namespace Script.RayTracing
                 NativeArray<BoundingVolumeHierarchy.Node> sketch =
                     new NativeArray<BoundingVolumeHierarchy.Node>(sketchNodeCount, Allocator.Temp);
                 var bvh = new BoundingVolumeHierarchy(sketch);
-                bvh.Build(pointAndIndex, aabbs, out int nodeCount, true);
+                bvh.Build(pointAndIndex, aabbs, out int nodeCount);
                 
                 //Build BLAS BlobAssetReference
                 BlobBuilder blasBlobBuilder = new BlobBuilder(Allocator.Temp);
