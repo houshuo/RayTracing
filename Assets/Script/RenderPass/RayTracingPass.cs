@@ -73,6 +73,7 @@ namespace Script.RayTracing
                 RTWidth = (int)(cameraTextureDescriptor.width / pass.settings.RTDownScaling);
                 RTHeight = (int)(cameraTextureDescriptor.height / pass.settings.RTDownScaling);
                 cmd.GetTemporaryRT(ShaderIDs.RayTracingResult, RTWidth, RTHeight, 0, FilterMode.Bilinear, RenderTextureFormat.Default, RenderTextureReadWrite.Default, 1, true);
+                cmd.ClearRandomWriteTargets();
             }
 
             private void SetShaderParametersPerUpdate(BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
@@ -106,21 +107,21 @@ namespace Script.RayTracing
             
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                var buildAccelerateStructureSystemHandle = World.DefaultGameObjectInjectionWorld.GetExistingSystem<BuildAccelerateStructureSystem>();
-                if (buildAccelerateStructureSystemHandle == SystemHandle.Null)
-                    return;
-                var buildAccelerateStructureSystem =
-                    World.DefaultGameObjectInjectionWorld.Unmanaged.GetUnsafeSystemRef<BuildAccelerateStructureSystem>(
-                        buildAccelerateStructureSystemHandle);
-                if (buildAccelerateStructureSystem.EmptyScene)
-                    return;
-                
                 CommandBuffer cmd = CommandBufferPool.Get(profilerTag);
-                // Set the target and dispatch the compute shader
-                SetShaderParametersPerUpdate(buildAccelerateStructureSystem, cmd);
-                cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
-                // cmd.DispatchCompute(settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
-                // use _converged because destination is not destination is not HDR texture
+                var buildAccelerateStructureSystemHandle = World.DefaultGameObjectInjectionWorld.GetExistingSystem<BuildAccelerateStructureSystem>();
+                if (buildAccelerateStructureSystemHandle != SystemHandle.Null)
+                {
+                    var buildAccelerateStructureSystem =
+                        World.DefaultGameObjectInjectionWorld.Unmanaged.GetUnsafeSystemRef<BuildAccelerateStructureSystem>(
+                            buildAccelerateStructureSystemHandle);
+                    if (!buildAccelerateStructureSystem.EmptyScene)
+                    {
+                        // Set the target and dispatch the compute shader
+                        SetShaderParametersPerUpdate(buildAccelerateStructureSystem, cmd);
+                        cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
+                    }
+                }
+                
                 cmd.Blit(ShaderIDs.RayTracingResult, source); 
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
