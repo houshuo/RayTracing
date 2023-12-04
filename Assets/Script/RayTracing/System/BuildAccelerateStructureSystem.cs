@@ -1,4 +1,5 @@
-﻿using Unity.Burst;
+﻿using System.Runtime.InteropServices;
+using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -11,43 +12,48 @@ using UnityEngine;
 namespace Script.RayTracing
 {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public partial class BuildAccelerateStructureSystem : SystemBase
+    public partial struct BuildAccelerateStructureSystem : ISystem
     {
-        public bool EmptyScene = false;
-        
+        public bool EmptyScene ;
+        //TLAS
         private TopLevelAccelerateStructure TLAS;
+
+        public NativeArray<BoundingVolumeHierarchy.Node> TLASBuffer
+        {
+            get { return TLAS.Nodes; }
+        }
         //PerObjects BVH
-        public ComputeBuffer ObjectsBVHOffsetBuffer;
-        public ComputeBuffer ObjectsBVHBuffer;
+        public NativeArray<int> ObjectsBVHOffsetBuffer;
+        public NativeArray<BoundingVolumeHierarchy.Node> ObjectsBVHBuffer;
         //PerObjects Vertices
-        public ComputeBuffer ObjectsVerticesOffsetBuffer;
-        public ComputeBuffer ObjectsVerticesBuffer;
+        public NativeArray<int> ObjectsVerticesOffsetBuffer;
+        public NativeArray<float3> ObjectsVerticesBuffer;
         //PerObjects Normals
-        public ComputeBuffer ObjectsNormalsOffsetBuffer;
-        public ComputeBuffer ObjectsNormalsBuffer;
+        public NativeArray<int> ObjectsNormalsOffsetBuffer;
+        public NativeArray<float3> ObjectsNormalsBuffer;
         //PerObjects Triangle Indices
-        public ComputeBuffer ObjectsTrianglesOffsetBuffer;
-        public ComputeBuffer ObjectsTrianglesBuffer;
+        public NativeArray<int> ObjectsTrianglesOffsetBuffer;
+        public NativeArray<int3> ObjectsTrianglesBuffer;
         //PerObjects Properties
-        public ComputeBuffer ObjectsMaterialBuffer;
-        public ComputeBuffer ObjectsWorldToLocalBuffer;
-        //TLAS Buffer
-        public ComputeBuffer TLASBuffer;
+        public NativeArray<RayTraceMaterial> ObjectsMaterialBuffer;
+        public NativeArray<float4x4> ObjectsWorldToLocalBuffer;
         
-        protected override void OnCreate()
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
         {
             TLAS = new TopLevelAccelerateStructure();
             TLAS.Init();
         }
         
-        protected override void OnUpdate()
+        [BurstCompile]
+        public void OnUpdate(ref SystemState state)
         {
             //Query RayTraceable
             EntityQuery rayTraceableQuery = SystemAPI.QueryBuilder()
                 .WithAll<RayTraceableComponent, LocalToWorld>()
                 .Build();
             var rayTraceables =
-                rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(WorldUpdateAllocator);
+                rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(state.WorldUpdateAllocator);
 
             EmptyScene = rayTraceables.Length == 0;
             if (EmptyScene)
@@ -58,25 +64,25 @@ namespace Script.RayTracing
             int totalVerticesCount = 0;
             int totalNormalsCount = 0;
             int totalTrianglesCount = 0;
-            NativeArray<int> blasBVHOffsets = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
-            NativeArray<int> blasVerticesOffsets = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
-            NativeArray<int> blasNormalsOffsets = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
-            NativeArray<int> blasTriangleOffsets = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
+            PrepareNativeArray(ref ObjectsBVHOffsetBuffer, rayTraceables.Length);
+            PrepareNativeArray(ref ObjectsVerticesOffsetBuffer, rayTraceables.Length);
+            PrepareNativeArray(ref ObjectsNormalsOffsetBuffer, rayTraceables.Length);
+            PrepareNativeArray(ref ObjectsTrianglesOffsetBuffer, rayTraceables.Length);
             for(int i = 0; i < rayTraceables.Length; i++)
             {
                 var rayTraceableComponent = rayTraceables[i];
                 ref BottomLevelAccelerateStructure blas = ref rayTraceableComponent.BLAS.Value;
                 ref TriangleMesh mesh = ref rayTraceableComponent.mesh.Value;
-                blasBVHOffsets[i] = totalBVHNodeCount;
+                ObjectsBVHOffsetBuffer[i] = totalBVHNodeCount;
                 totalBVHNodeCount += blas.Nodes.Length;
 
-                blasVerticesOffsets[i] = totalVerticesCount;
+                ObjectsVerticesOffsetBuffer[i] = totalVerticesCount;
                 totalVerticesCount += mesh.vertices.Length;
                 
-                blasNormalsOffsets[i] = totalNormalsCount;
+                ObjectsNormalsOffsetBuffer[i] = totalNormalsCount;
                 totalNormalsCount += mesh.normals.Length;
 
-                blasTriangleOffsets[i] = totalTrianglesCount;
+                ObjectsTrianglesOffsetBuffer[i] = totalTrianglesCount;
                 totalTrianglesCount += mesh.triangles.Length;
             }
             
@@ -88,96 +94,65 @@ namespace Script.RayTracing
             buildTLASJob.aabbs = aabbs;
             buildTLASJob.pointAndIndex = pointAndIndices;
             
-            buildTLASJob.blasBVHOffsets = blasBVHOffsets;
-            PrepareComputeBuffer(ref ObjectsBVHOffsetBuffer, rayTraceables.Length, sizeof(int));
-            buildTLASJob.blasBVHOffsetsCopy = ObjectsBVHOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
-            PrepareComputeBuffer(ref ObjectsBVHBuffer, totalBVHNodeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoundingVolumeHierarchy.Node)));
-            buildTLASJob.blasBVHArray = ObjectsBVHBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, totalBVHNodeCount);
+            buildTLASJob.blasBVHOffsets = ObjectsBVHOffsetBuffer;
+            PrepareNativeArray(ref ObjectsBVHBuffer, totalBVHNodeCount);
+            buildTLASJob.blasBVHArray = ObjectsBVHBuffer;
             
-            buildTLASJob.blasVerticesOffsets = blasVerticesOffsets;
-            PrepareComputeBuffer(ref ObjectsVerticesOffsetBuffer, rayTraceables.Length, sizeof(int));
-            buildTLASJob.blasVerticesOffsetsCopy = ObjectsVerticesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
-            PrepareComputeBuffer(ref ObjectsVerticesBuffer, totalVerticesCount, 3 * sizeof(float));
-            buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer.BeginWrite<float3>(0, totalVerticesCount);
+            buildTLASJob.blasVerticesOffsets = ObjectsVerticesOffsetBuffer;
+            PrepareNativeArray(ref ObjectsVerticesBuffer, totalVerticesCount);
+            buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer;
             
-            buildTLASJob.blasNormalsOffsets = blasNormalsOffsets;
-            PrepareComputeBuffer(ref ObjectsNormalsOffsetBuffer, rayTraceables.Length, sizeof(int));
-            buildTLASJob.blasNormalsOffsetsCopy = ObjectsNormalsOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
-            PrepareComputeBuffer(ref ObjectsNormalsBuffer, totalNormalsCount, 3 * sizeof(float));
-            buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer.BeginWrite<float3>(0, totalNormalsCount);
+            buildTLASJob.blasNormalsOffsets = ObjectsNormalsOffsetBuffer;
+            PrepareNativeArray(ref ObjectsNormalsBuffer, totalNormalsCount);
+            buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer;
             
-            buildTLASJob.blasTriangleOffsets = blasTriangleOffsets;
-            PrepareComputeBuffer(ref ObjectsTrianglesOffsetBuffer, totalTrianglesCount, sizeof(int));
-            buildTLASJob.blasTriangleOffsetsCopy = ObjectsTrianglesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
-            PrepareComputeBuffer(ref ObjectsTrianglesBuffer, totalTrianglesCount, 3 * sizeof(int));
-            buildTLASJob.blasTriangleArray = ObjectsTrianglesBuffer.BeginWrite<int3>(0, totalTrianglesCount);
+            buildTLASJob.blasTriangleOffsets = ObjectsTrianglesOffsetBuffer;
+            PrepareNativeArray(ref ObjectsTrianglesBuffer, totalTrianglesCount);
+            buildTLASJob.blasTriangleArray = ObjectsTrianglesBuffer;
             
-            PrepareComputeBuffer(ref ObjectsMaterialBuffer, rayTraceables.Length, System.Runtime.InteropServices.Marshal.SizeOf(typeof(RayTraceMaterial)));
-            buildTLASJob.blasMaterials = ObjectsMaterialBuffer.BeginWrite<RayTraceMaterial>(0, rayTraceables.Length);
-            PrepareComputeBuffer(ref ObjectsWorldToLocalBuffer, rayTraceables.Length, 16 * sizeof(float));
-            buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer.BeginWrite<float4x4>(0, rayTraceables.Length);
+            PrepareNativeArray(ref ObjectsMaterialBuffer, rayTraceables.Length);
+            buildTLASJob.blasMaterials = ObjectsMaterialBuffer;
+            PrepareNativeArray(ref ObjectsWorldToLocalBuffer, rayTraceables.Length);
+            buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer;
             var jobHandle = buildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
             //build TLAS
             TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle).Complete();
-            Dependency.Complete();
-            //set TLAS to compute shader
-            ObjectsBVHOffsetBuffer.EndWrite<int>(rayTraceables.Length);
-            ObjectsBVHBuffer.EndWrite<BoundingVolumeHierarchy.Node>(totalBVHNodeCount);
-            
-            ObjectsVerticesOffsetBuffer.EndWrite<int>(rayTraceables.Length);
-            ObjectsVerticesBuffer.EndWrite<float3>(totalVerticesCount);
-            
-            ObjectsNormalsOffsetBuffer.EndWrite<int>(rayTraceables.Length);
-            ObjectsNormalsBuffer.EndWrite<float3>(totalNormalsCount);
-            
-            ObjectsTrianglesOffsetBuffer.EndWrite<int>(rayTraceables.Length);
-            ObjectsTrianglesBuffer.EndWrite<int3>(totalTrianglesCount);
-            
-            ObjectsMaterialBuffer.EndWrite<RayTraceMaterial>(rayTraceables.Length);
-            ObjectsWorldToLocalBuffer.EndWrite<float4x4>(rayTraceables.Length);
-            
-            PrepareComputeBuffer(ref TLASBuffer, TLAS.NodeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(BoundingVolumeHierarchy.Node)));
-            NativeArray<BoundingVolumeHierarchy.Node> tlasNativeArray = TLASBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, TLAS.NodeCount);
-            NativeArray<BoundingVolumeHierarchy.Node>.Copy(TLAS.Nodes, tlasNativeArray, TLAS.NodeCount);
-            TLASBuffer.EndWrite<BoundingVolumeHierarchy.Node>(TLAS.NodeCount);
         }
 
-        protected override void OnDestroy()
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
         {
             TLAS.Dispose();
-            DestroyComputeBuffer(ref ObjectsBVHOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsBVHBuffer);
-            DestroyComputeBuffer(ref ObjectsVerticesOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsVerticesBuffer);
-            DestroyComputeBuffer(ref ObjectsNormalsOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsNormalsBuffer);
-            DestroyComputeBuffer(ref ObjectsTrianglesOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
-            DestroyComputeBuffer(ref ObjectsMaterialBuffer);
-            DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
-            DestroyComputeBuffer(ref TLASBuffer);
+            DestroyNativeArray(ref ObjectsBVHOffsetBuffer);
+            DestroyNativeArray(ref ObjectsBVHBuffer);
+            DestroyNativeArray(ref ObjectsVerticesOffsetBuffer);
+            DestroyNativeArray(ref ObjectsVerticesBuffer);
+            DestroyNativeArray(ref ObjectsNormalsOffsetBuffer);
+            DestroyNativeArray(ref ObjectsNormalsBuffer);
+            DestroyNativeArray(ref ObjectsTrianglesOffsetBuffer);
+            DestroyNativeArray(ref ObjectsTrianglesBuffer);
+            DestroyNativeArray(ref ObjectsMaterialBuffer);
+            DestroyNativeArray(ref ObjectsWorldToLocalBuffer);
         }
 
-        private static void PrepareComputeBuffer(ref ComputeBuffer buffer, int count, int stride)
+        private static void PrepareNativeArray<T>(ref NativeArray<T> buffer, int count) where T : struct
         {
-            if (buffer != null && (buffer.stride != stride || buffer.count < count))
+            if (buffer != null && buffer.Length < count)
             {
                 buffer.Dispose();
-                buffer = null;
             }
             
-            if (buffer == null)
+            if (!buffer.IsCreated)
             {
-                buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured, ComputeBufferMode.SubUpdates);
+                buffer = new NativeArray<T>(count, Allocator.Persistent);
             }
         }
 
-        private static void DestroyComputeBuffer(ref ComputeBuffer buffer)
+        private static void DestroyNativeArray<T>(ref NativeArray<T> buffer) where T : struct
         {
-            if (buffer == null)
+            if (!buffer.IsCreated)
                 return;
             buffer.Dispose();
-            buffer = null;
         }
     }
     
@@ -187,20 +162,16 @@ namespace Script.RayTracing
         public NativeArray<Aabb> aabbs;
         public NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex;
         //BVH
-        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasBVHOffsets;
-        public NativeArray<int> blasBVHOffsetsCopy;
+        [ReadOnly] public NativeArray<int> blasBVHOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<BoundingVolumeHierarchy.Node> blasBVHArray;
         //Vertices
-        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasVerticesOffsets;
-        public NativeArray<int> blasVerticesOffsetsCopy;
+        [ReadOnly] public NativeArray<int> blasVerticesOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasVerticesArray;
         //Normals
-        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasNormalsOffsets;
-        public NativeArray<int> blasNormalsOffsetsCopy;
+        [ReadOnly] public NativeArray<int> blasNormalsOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasNormalsArray;
         //Indices
-        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasTriangleOffsets;
-        public NativeArray<int> blasTriangleOffsetsCopy;
+        [ReadOnly] public NativeArray<int> blasTriangleOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<int3> blasTriangleArray;
         //Per Object Properties
         public NativeArray<RayTraceMaterial> blasMaterials;
@@ -234,28 +205,24 @@ namespace Script.RayTracing
             aabbs[entityIndexInQuery] = new Aabb(){Max = max, Min = min};
             
             //2.set blas and triangle to array by offset
-            blasBVHOffsetsCopy[entityIndexInQuery] = blasBVHOffsets[entityIndexInQuery];
             int blasOffset = blasBVHOffsets[entityIndexInQuery];
             for (int i = 0; i < blas.Nodes.Length; i++)
             {
                 blasBVHArray[i + blasOffset] = blas.Nodes[i];
             }
             
-            blasVerticesOffsetsCopy[entityIndexInQuery] = blasVerticesOffsets[entityIndexInQuery];
             int verticesOffset = blasVerticesOffsets[entityIndexInQuery];
             for (int i = 0; i < mesh.vertices.Length; i++)
             {
                 blasVerticesArray[i + verticesOffset] = mesh.vertices[i];
             }
             
-            blasNormalsOffsetsCopy[entityIndexInQuery] = blasNormalsOffsets[entityIndexInQuery];
             int normalsOffset = blasNormalsOffsets[entityIndexInQuery];
             for (int i = 0; i < mesh.normals.Length; i++)
             {
                 blasNormalsArray[i + normalsOffset] = mesh.normals[i];
             }
             
-            blasTriangleOffsetsCopy[entityIndexInQuery] = blasTriangleOffsets[entityIndexInQuery];
             int triangleOffset = blasTriangleOffsets[entityIndexInQuery];
             for (int i = 0; i < mesh.triangles.Length; i++)
             {
