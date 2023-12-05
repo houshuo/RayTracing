@@ -448,15 +448,14 @@ namespace Script.RayTracing
                     do
                     {
                         Range range = ranges[--rangeStackSize];
-
-                        if (range.Depth > Constants.MaxTreeDepth || range.Length <= Constants.SmallRangeSize)
-                        {
-                            ProcessSmallRange(range, ref FreeNodeIndex);
-                        }
-                        else
+                        if (range.Depth <= Constants.MaxTreeDepth && range.Length > Constants.SmallRangeSize)
                         {
                             ProcessLargeRange(range, subRanges);
                             CreateChildren(subRanges, 4, range.Root, ref FreeNodeIndex, ranges, ref rangeStackSize);
+                        }
+                        else
+                        {
+                            ProcessSmallRange(range, ref FreeNodeIndex);
                         }
                     }
                     while (rangeStackSize > 0);

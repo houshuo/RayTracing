@@ -1,13 +1,10 @@
-﻿using System.Runtime.InteropServices;
-using Unity.Burst;
-using Unity.Burst.Intrinsics;
+﻿using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
-using UnityEngine;
 
 namespace Script.RayTracing
 {
@@ -28,8 +25,6 @@ namespace Script.RayTracing
         //PerObjects Vertices
         public NativeArray<int> ObjectsVerticesOffsetBuffer;
         public NativeArray<float3> ObjectsVerticesBuffer;
-        //PerObjects Normals
-        public NativeArray<int> ObjectsNormalsOffsetBuffer;
         public NativeArray<float3> ObjectsNormalsBuffer;
         //PerObjects Triangle Indices
         public NativeArray<int> ObjectsTrianglesOffsetBuffer;
@@ -62,11 +57,9 @@ namespace Script.RayTracing
             //Calculate total nodes and build BLAS offsets
             int totalBVHNodeCount = 0;
             int totalVerticesCount = 0;
-            int totalNormalsCount = 0;
             int totalTrianglesCount = 0;
             PrepareNativeArray(ref ObjectsBVHOffsetBuffer, rayTraceables.Length);
             PrepareNativeArray(ref ObjectsVerticesOffsetBuffer, rayTraceables.Length);
-            PrepareNativeArray(ref ObjectsNormalsOffsetBuffer, rayTraceables.Length);
             PrepareNativeArray(ref ObjectsTrianglesOffsetBuffer, rayTraceables.Length);
             for(int i = 0; i < rayTraceables.Length; i++)
             {
@@ -78,9 +71,6 @@ namespace Script.RayTracing
 
                 ObjectsVerticesOffsetBuffer[i] = totalVerticesCount;
                 totalVerticesCount += mesh.vertices.Length;
-                
-                ObjectsNormalsOffsetBuffer[i] = totalNormalsCount;
-                totalNormalsCount += mesh.normals.Length;
 
                 ObjectsTrianglesOffsetBuffer[i] = totalTrianglesCount;
                 totalTrianglesCount += mesh.triangles.Length;
@@ -101,9 +91,6 @@ namespace Script.RayTracing
             buildTLASJob.blasVerticesOffsets = ObjectsVerticesOffsetBuffer;
             PrepareNativeArray(ref ObjectsVerticesBuffer, totalVerticesCount);
             buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer;
-            
-            buildTLASJob.blasNormalsOffsets = ObjectsNormalsOffsetBuffer;
-            PrepareNativeArray(ref ObjectsNormalsBuffer, totalNormalsCount);
             buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer;
             
             buildTLASJob.blasTriangleOffsets = ObjectsTrianglesOffsetBuffer;
@@ -127,7 +114,6 @@ namespace Script.RayTracing
             DestroyNativeArray(ref ObjectsBVHBuffer);
             DestroyNativeArray(ref ObjectsVerticesOffsetBuffer);
             DestroyNativeArray(ref ObjectsVerticesBuffer);
-            DestroyNativeArray(ref ObjectsNormalsOffsetBuffer);
             DestroyNativeArray(ref ObjectsNormalsBuffer);
             DestroyNativeArray(ref ObjectsTrianglesOffsetBuffer);
             DestroyNativeArray(ref ObjectsTrianglesBuffer);
@@ -164,11 +150,9 @@ namespace Script.RayTracing
         //BVH
         [ReadOnly] public NativeArray<int> blasBVHOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<BoundingVolumeHierarchy.Node> blasBVHArray;
-        //Vertices
+        //Vertices+Normals
         [ReadOnly] public NativeArray<int> blasVerticesOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasVerticesArray;
-        //Normals
-        [ReadOnly] public NativeArray<int> blasNormalsOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasNormalsArray;
         //Indices
         [ReadOnly] public NativeArray<int> blasTriangleOffsets;
@@ -217,10 +201,9 @@ namespace Script.RayTracing
                 blasVerticesArray[i + verticesOffset] = mesh.vertices[i];
             }
             
-            int normalsOffset = blasNormalsOffsets[entityIndexInQuery];
             for (int i = 0; i < mesh.normals.Length; i++)
             {
-                blasNormalsArray[i + normalsOffset] = mesh.normals[i];
+                blasNormalsArray[i + verticesOffset] = mesh.normals[i];
             }
             
             int triangleOffset = blasTriangleOffsets[entityIndexInQuery];

@@ -219,20 +219,6 @@ bool Trisection(Ray ray, float3 v0, float3 v1, float3 v2,
     return false;
 }
 
-int compress(inout int4 output, int index, int4 val, bool4 mask)
-{
-    if (mask.x)
-        output[index++] = val.x;
-    if (mask.y)
-        output[index++] = val.y;
-    if (mask.z)
-        output[index++] = val.z;
-    if (mask.w)
-        output[index++] = val.w;
-
-    return index;
-}
-
 bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction)
 {
     float4 lx = aabbs.Lx - ray.origin.x;
@@ -278,14 +264,14 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     {
         BoundingVolumeHierarchyNode node = _BLAS[stack[--top] + blasOffset];
         bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
-        int4 hitData;
-        int hitCount = compress(hitData, 0, node.Data, hitMask);
-
-        if (node.Flags != 0)
+        [unroll]
+        for (int i = 0; i < 4; i++)
         {
-            for (int i = 0; i < hitCount; i++)
+            if(!hitMask[i])
+                continue;
+            if (node.Flags != 0)
             {
-                int3 triangleIndex = _Triangles[hitData[i] + _TrianglesOffsets[index]];
+                int3 triangleIndex = _Triangles[node.Data[i] + _TrianglesOffsets[index]];
                 float3
                     v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]],
                     v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]],
@@ -314,14 +300,12 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                     }
                 }
             }
-        }
-        else
-        {
-            for(int i = 0; i < hitCount; i++)
+            else
             {
-                stack[top++] = hitData[i];
+                stack[top++] = node.Data[i];
             }
         }
+        
     } while (top > 0);
 }
 
@@ -334,22 +318,21 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
     {
         BoundingVolumeHierarchyNode node = _TLAS[stack[--top]];
         bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance);
-        int4 hitData;
-        int hitCount = compress(hitData, 0, node.Data, hitMask);
-
-        if (node.Flags != 0)
+        [unroll]
+        for (int i = 0; i < 4; i++)
         {
-            for (int i = 0; i < hitCount; i++)
+            if(!hitMask[i])
+                continue;
+            if (node.Flags != 0)
             {
-                IntersectBLAS(ray, hitData[i], bestHit);
+                IntersectBLAS(ray, node.Data[i], bestHit);
             }
-        }
-        else
-        {
-            for(int i = 0; i < hitCount; i++)
+            else
             {
-                stack[top++] = hitData[i];
+                stack[top++] = node.Data[i];
             }
+            
+            
         }
     } while (top > 0);
 }
@@ -357,7 +340,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
 RayHit Trace(Ray ray) // populate bestHit
 {
     RayHit bestHit = CreateRayHit();
-    // IntersectTLAS(ray, bestHit);
+    IntersectTLAS(ray, bestHit);
     return bestHit;
 }
 
@@ -420,6 +403,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
 
     // Path Trace and shade
     float3 result = float3(0, 0, 0);
+    [unroll]
     for (int i = 0; i < _MaxReflections /* max num reflections */; i++)
     {
         RayHit hit = Trace(ray);
@@ -427,8 +411,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         // multiply energy at current ray path with light emitted at hit point
         result += ray.energy * Shade(ray, hit);
         // then update ray energy to account attenuation at hit point
-        // if (!any(ray.energy))
-        //     break;
+        if (!any(ray.energy))
+            break;
     }
     Result[id.xy] = float4(result, 1);
 }
