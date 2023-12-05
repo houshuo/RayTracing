@@ -664,8 +664,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.010735445, y: 0.9882661, z: -0.12773463, w: 0.08305878}
-  m_LocalPosition: {x: -136.7, y: 102, z: 134.6}
+  m_LocalRotation: {x: 0.00035690516, y: 0.9941349, z: -0.108097546, w: 0.0032821447}
+  m_LocalPosition: {x: 31.264671, y: 93.63304, z: 250.56525}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -683,25 +683,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bb95b02d57a244becac1f366cd40fc00, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  randomSeed: 1223832719
-  RayTracingShader: {fileID: 7200000, guid: c4e6758be8dda491696a52d390b1d2bb, type: 3}
-  SkyBoxTextures:
-  - {fileID: 2800000, guid: 8fa846f66590240f8994b20a7bda4317, type: 3}
-  - {fileID: 2800000, guid: 164a889281f674f79994dff7406e3242, type: 3}
-  - {fileID: 2800000, guid: 74a2456e6d69c4ebbac99abae8b4a116, type: 3}
-  - {fileID: 2800000, guid: d125fce2b6b984f678947d248c98e9e0, type: 3}
-  - {fileID: 2800000, guid: 0b3df8d6ae1c64c1694d844b999cedcb, type: 3}
-  - {fileID: 2800000, guid: 8473d67e01aa84426a977a918784e053, type: 3}
-  - {fileID: 2800000, guid: a1c7142ba9f5c4c85ad0651816f17008, type: 3}
-  - {fileID: 2800000, guid: 2feb2e0a64e0f47bb929100e4f28f7b0, type: 3}
-  - {fileID: 2800000, guid: 7e80954269cec4bfea6534feaea9015b, type: 3}
-  MaxReflections: 2
-  maxReflectionsLocked: 6
-  maxReflectionsUnlocked: 2
-  directionalLight: {fileID: 705507994}
-  GroundAlbedo: {r: 0.4245283, g: 0, b: 0, a: 1}
-  GroundSpecular: {r: 0.25, g: 0.25, b: 0.25, a: 1}
-  GroundEmission: {r: 0.05, g: 0.05, b: 0.05, a: 0}
 --- !u!114 &963194230
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -714,16 +695,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 332ae47dbcb75405c80e7ef7f50cb3d2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  fov: 50
-  minFov: 1
-  maxFov: 90
-  sensitivity: 5
-  mainSpeed: 50
-  camSens: 0.08
-  shiftAdd: 100
-  maxShift: 1000
-  rotateSpeed: 20
-  vertSpeed: 1
 --- !u!114 &963194231
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -78,7 +78,7 @@ namespace Script.RayTracing
 
         public struct Constants
         {
-            public const int MaxTreeDepth = 63;
+            public const int MaxTreeDepth = 21;
             public const int MaxNumTreeBranches = 64;
             public const int SmallRangeSize = 32;
             public const int UnaryStackSize = 256;

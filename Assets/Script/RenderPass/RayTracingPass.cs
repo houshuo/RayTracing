@@ -24,12 +24,7 @@ namespace Script.RayTracing
             public int randomSeed;
             public ComputeShader RayTracingShader;
             public Texture SkyBoxTextures;
-            public bool SkyboxEnabled = true;
-            
             public int MaxReflections = 2;
-            public int maxReflectionsLocked = 4;
-            public int maxReflectionsUnlocked = 2;
-
             public float RTDownScaling;
         }
         public RayTraceSettings settings = new RayTraceSettings();
@@ -76,33 +71,41 @@ namespace Script.RayTracing
                 cmd.ClearRandomWriteTargets();
             }
 
-            private void SetShaderParametersPerUpdate(BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
+            private void SetShaderParametersPerUpdate(ref RenderingData renderingData, BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
             {
-                // RayTracingShader.SetMatrix("_CameraToWorld", _camera.cameraToWorldMatrix);
-                // RayTracingShader.SetMatrix("_CameraInverseProjection", _camera.projectionMatrix.inverse);
-                // RayTracingShader.SetVector("_PixelOffset", new Vector2(Random.value, Random.value));
-                // RayTracingShader.SetInt("_MaxReflections", MaxReflections);
-                //
-                // // lighting params
-                // Vector3 l = directionalLight.transform.forward;
-                // RayTracingShader.SetVector(
-                //     "_DirectionalLight", new Vector4(l.x, l.y, l.z, directionalLight.intensity)
-                // );
-                //
-                // // ground plane
-                // RayTracingShader.SetVector("_GroundAlbedo", ColorToVec3(GroundAlbedo));
-                // RayTracingShader.SetVector("_GroundSpecular", ColorToVec3(GroundSpecular));
-                // RayTracingShader.SetVector("_GroundEmission", ColorToVec3(GroundEmission));
-                //
-                // // rng
-                // RayTracingShader.SetFloat("_Seed", Random.value);
-                //
-                // // tri mesh mats
-                // // update every frame to allow for hot reloading of material
-                // UpdateTriMeshMats();
+                Camera camera = renderingData.cameraData.camera;
+                cmd.SetComputeMatrixParam(pass.settings.RayTracingShader, "_CameraToWorld", camera.cameraToWorldMatrix);
+                cmd.SetComputeMatrixParam(pass.settings.RayTracingShader,"_CameraInverseProjection", camera.projectionMatrix.inverse);
+                cmd.SetComputeVectorParam(pass.settings.RayTracingShader,"_PixelOffset", new Vector2(Random.value, Random.value));
+                cmd.SetComputeIntParam(pass.settings.RayTracingShader,"_MaxReflections", pass.settings.MaxReflections);
+                // rng
+                cmd.SetComputeFloatParam(pass.settings.RayTracingShader,"_Seed", Random.value);
+                //skybox
                 cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
+                //TLAS
                 PrepareComputeBuffer(ref pass.TLASBuffer, buildAccelerateStructureSystem.TLASBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TALSBuffer", pass.TLASBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TLAS", pass.TLASBuffer);
+                //BLAS
+                PrepareComputeBuffer(ref pass.ObjectsBVHOffsetBuffer, buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLASOffsets", pass.ObjectsBVHOffsetBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsBVHBuffer, buildAccelerateStructureSystem.ObjectsBVHBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLAS", pass.ObjectsBVHBuffer);
+                //Triangle Mesh
+                PrepareComputeBuffer(ref pass.ObjectsVerticesOffsetBuffer, buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", pass.ObjectsVerticesOffsetBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsVerticesBuffer, buildAccelerateStructureSystem.ObjectsVerticesBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", pass.ObjectsVerticesBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsNormalsBuffer, buildAccelerateStructureSystem.ObjectsNormalsBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Normals", pass.ObjectsNormalsBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsTrianglesOffsetBuffer, buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", pass.ObjectsTrianglesOffsetBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsTrianglesBuffer, buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", pass.ObjectsTrianglesBuffer);
+                //Per Object Property
+                PrepareComputeBuffer(ref pass.ObjectsMaterialBuffer, buildAccelerateStructureSystem.ObjectsMaterialBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", pass.ObjectsMaterialBuffer);
+                PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
+                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
             }
             
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -117,8 +120,9 @@ namespace Script.RayTracing
                     if (!buildAccelerateStructureSystem.EmptyScene)
                     {
                         // Set the target and dispatch the compute shader
-                        SetShaderParametersPerUpdate(buildAccelerateStructureSystem, cmd);
+                        SetShaderParametersPerUpdate(ref renderingData, buildAccelerateStructureSystem, cmd);
                         cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
+                        cmd.DispatchCompute(pass.settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
                     }
                 }
                 

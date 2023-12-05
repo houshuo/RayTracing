@@ -40,7 +40,7 @@ namespace Script.RayTracing
             TLAS.Init();
         }
         
-        [BurstCompile]
+        // [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             //Query RayTraceable
@@ -91,6 +91,7 @@ namespace Script.RayTracing
             buildTLASJob.blasVerticesOffsets = ObjectsVerticesOffsetBuffer;
             PrepareNativeArray(ref ObjectsVerticesBuffer, totalVerticesCount);
             buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer;
+            PrepareNativeArray(ref ObjectsNormalsBuffer, totalVerticesCount);
             buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer;
             
             buildTLASJob.blasTriangleOffsets = ObjectsTrianglesOffsetBuffer;
@@ -142,7 +143,7 @@ namespace Script.RayTracing
         }
     }
     
-    [BurstCompile]
+    // [BurstCompile]
     public partial struct BuildTLASJob : IJobEntity
     {
         public NativeArray<Aabb> aabbs;
