@@ -654,6 +654,7 @@ namespace Script.RayTracing
             SetAabbFromPoints(ref aabb, (float4*)points.GetUnsafePtr(), points.Length);
             level0[0] = new Builder.Range(0, points.Length, 1, aabb, 0);
             int largestRangeInLastLevel = 0;
+            int minTreeNodeLevel;
             int maxNumBranchesMinusOneSplit = Constants.MaxNumTreeBranches - 4;
             int freeNodeIndex = 2;
 
@@ -662,6 +663,7 @@ namespace Script.RayTracing
             Builder.Range* subRanges = stackalloc Builder.Range[4];
             do
             {
+                minTreeNodeLevel = Constants.MaxTreeDepth;
                 for (int i = 0; i < level0Size; ++i)
                 {
                     if (level0[i].Depth <= Constants.MaxTreeDepth 
@@ -673,16 +675,19 @@ namespace Script.RayTracing
 
                         // Create nodes for the sub-ranges and append level 1 sub-ranges.
                         builder.CreateInternalNodes(subRanges, 4, level0[i].Root, level1, ref level1Size, ref freeNodeIndex);
-                        
+
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[0].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[1].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[2].Length);
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, subRanges[3].Length);
+                        
+                        minTreeNodeLevel = math.min(minTreeNodeLevel, level0[i].Depth + 1);
                     }
                     else
                     {
                         level1[level1Size++] = level0[i];
                         largestRangeInLastLevel = math.max(largestRangeInLastLevel, level0[i].Length);
+                        minTreeNodeLevel = math.min(minTreeNodeLevel, level0[i].Depth);
                     }
                 }
 
@@ -692,7 +697,9 @@ namespace Script.RayTracing
                 
                 level0Size = level1Size;
                 level1Size = 0;
-            } while (level0Size <= maxNumBranchesMinusOneSplit && largestRangeInLastLevel > Constants.SmallRangeSize);
+            } while (level0Size <= maxNumBranchesMinusOneSplit 
+                     && largestRangeInLastLevel > Constants.SmallRangeSize 
+                     && minTreeNodeLevel <= Constants.MaxTreeDepth);
             
             RangeSizeAndIndex* rangeMapBySize = stackalloc RangeSizeAndIndex[Constants.MaxNumTreeBranches];
 
