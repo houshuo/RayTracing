@@ -10,7 +10,6 @@ float4x4 _CameraInverseProjection;
 // skybox
 Texture2D<float4> _SkyboxTexture;
 SamplerState sampler_SkyboxTexture;
-int _SkyboxEnabled = 1;
 static const float PI = 3.14159265f;
 
 // random jitter for anti-aliasing
@@ -78,31 +77,40 @@ float3 SampleHemisphere(float3 normal)
 }
 
 /*=============Supported Object Geometries================*/
-
+// BVH
+struct FourTransposedAabbs
+{
+    float4 Lx, Hx;    // Lower and upper bounds along the X axis.
+    float4 Ly, Hy;    // Lower and upper bounds along the Y axis.
+    float4 Lz, Hz;    // Lower and upper bounds along the Z axis.
+};
+struct BoundingVolumeHierarchyNode
+{
+    FourTransposedAabbs Bounds;
+    int4 Data;
+    int Flags;
+};
+// max array size for doing depth-first traversal of BVH
+static const uint MAX_BVH_STACK = 256;
+//TLAS
+StructuredBuffer<BoundingVolumeHierarchyNode> _TLAS;
+//BLAS
+StructuredBuffer<int> _BLASOffsets;
+StructuredBuffer<BoundingVolumeHierarchyNode> _BLAS;
 // Triangle meshes
+StructuredBuffer<int> _VerticesOffsets;
 StructuredBuffer<float3> _Vertices;
 StructuredBuffer<float3> _Normals;
-StructuredBuffer<int> _Indices;
-StructuredBuffer<int> _MatIndices;
-const int _NumIndices;
-
+StructuredBuffer<int> _TrianglesOffsets;
+StructuredBuffer<int3> _Triangles;
+//Per Object Property
 struct TriMeshMaterial {
-    float3 albedo, specular, emission;
+    float3 albedo;
+    float3 specular;
+    float3 emission;
 };
 StructuredBuffer<TriMeshMaterial> _TriMeshMats;
-
-// BVH
-struct BVH_Node {
-    float3 bot, top; // BBox
-    int leftOrCount;  // if leaf, number of tri indices. Else index of left child
-    int rightOrOffset; // if leaf, offset into indices buffer. Else index of right child
-    int isLeaf;
-};
-StructuredBuffer<BVH_Node> _BVH_Nodes;
-static const uint MAX_BVH_DEPTH = 64; // max array size for doing depth-first traversal of BVH
-const int _BVHSize;
-
-// #define BRUTE_FORCE 1
+StructuredBuffer<float4x4> _WorldToLocalMatrices;
 
 /*=======Ray=======*/
 struct Ray
@@ -211,110 +219,145 @@ bool Trisection(Ray ray, float3 v0, float3 v1, float3 v2,
     return false;
 }
 
-// ref: https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
-bool IntersectAABB(Ray r, float3 bot, float3 top, inout float2 t) {
-    float tmin, tmax, tymin, tymax, tzmin, tzmax, tmp;
+int compress(inout int4 output, int index, int4 val, bool4 mask)
+{
+    if (mask.x)
+        output[index++] = val.x;
+    if (mask.y)
+        output[index++] = val.y;
+    if (mask.z)
+        output[index++] = val.z;
+    if (mask.w)
+        output[index++] = val.w;
 
-    tmin = (bot.x - r.origin.x) * r.invDir.x;
-    tmax = (top.x - r.origin.x) * r.invDir.x;
-    if (tmin > tmax) { // swap
-        tmp = tmin; tmin = tmax; tmax = tmp;
-    }
-    tymin = (bot.y - r.origin.y) * r.invDir.y;
-    tymax = (top.y - r.origin.y) * r.invDir.y;
-    if (tymin > tymax) { // swap
-        tmp = tymin; tymin = tymax; tymax = tmp;
-    }
-
-    if ((tmin > tymax) || (tymin > tmax))  // miss
-        return false;
-    tmin = max(tmin, tymin);
-    tmax = min(tmax, tymax);
-
-    tzmin = (bot.z - r.origin.z) * r.invDir.z;
-    tzmax = (top.z - r.origin.z) * r.invDir.z;
-    if (tzmin > tzmax) { // swap
-        tmp = tzmin; tzmin = tzmax; tzmax = tmp;
-    }
-
-    if ((tmin > tzmax) || (tzmin > tmax))  // miss
-        return false;
-    tmin = max(tmin, tzmin);
-    tmax = min(tmax, tzmax);
-
-    t = float2(tmin, tmax);
-    return true;
+    return index;
 }
 
-void IntersectBVH(Ray ray, inout RayHit bestHit) {
-    int nodeStack[MAX_BVH_DEPTH];  // stack for performing BVH Traversal
-    int stackTop = 0;
+bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction)
+{
+    float4 lx = aabbs.Lx - ray.origin.x;
+    float4 hx = aabbs.Hx - ray.origin.x;
+    float4 nearXt = lx * ray.invDir.x;
+    float4 farXt = hx * ray.invDir.x;
 
-    nodeStack[0] = 0; // place root node on stack
-    int counter = 0;
+    float4 ly = aabbs.Ly - ray.origin.y;
+    float4 hy = aabbs.Hy - ray.origin.y;
+    float4 nearYt = ly * ray.invDir.y;
+    float4 farYt = hy * ray.invDir.y;
 
-    while (stackTop >= 0) {  // assume ray intersects bbox of curnode
-        if (counter++ > _BVHSize) return;
-        
-        BVH_Node node = _BVH_Nodes[nodeStack[stackTop--]]; // pop top node off stack
+    float4 lz = aabbs.Lz - ray.origin.z;
+    float4 hz = aabbs.Hz - ray.origin.z;
+    float4 nearZt = lz * ray.invDir.z;
+    float4 farZt = hz * ray.invDir.z;
 
-        float2 bbox_ts = float2(1.#INF, 1.#INF);
-        bool isectBBox = IntersectAABB(ray, node.bot, node.top, bbox_ts);
+    float4 nearX = min(nearXt, farXt);
+    float4 farX = max(nearXt, farXt);
 
-        if (!isectBBox || bbox_ts.x > bestHit.distance)
-            continue; // doesn't intersect current node, or hit is farther than closest. skip.
+    float4 nearY = min(nearYt, farYt);
+    float4 farY = max(nearYt, farYt);
 
-        if (node.isLeaf == 1) { // leaf node
-            int indexCount = node.leftOrCount;
-            int indexOff = node.rightOrOffset;
-            for (int i = indexOff; i < (indexOff + indexCount); i += 3) {
-                if (i < 0 || i > _NumIndices - 3) {
-                    return;
-                }
+    float4 nearZ = min(nearZt, farZt);
+    float4 farZ = max(nearZt, farZt);
+
+    float4 nearMax = max(max(max(nearX, nearY), nearZ), 0);
+    float4 farMin = min(min(min(farX, farY), farZ), maxFraction);
+    
+    return (nearMax <= farMin) & (lx <= hx);
+}
+
+void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
+{
+    int blasOffset = _BLASOffsets[index];
+    float4x4 worldToLocal = _WorldToLocalMatrices[index];
+    Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
+    
+    int stack[MAX_BVH_STACK];
+    int top = 0;
+    stack[top++] = 1;
+    do
+    {
+        BoundingVolumeHierarchyNode node = _BLAS[stack[--top] + blasOffset];
+        bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
+        int4 hitData;
+        int hitCount = compress(hitData, 0, node.Data, hitMask);
+
+        if (node.Flags != 0)
+        {
+            for (int i = 0; i < hitCount; i++)
+            {
+                int3 triangleIndex = _Triangles[hitData[i] + _TrianglesOffsets[index]];
                 float3
-                    v0 = _Vertices[_Indices[i]],
-                    v1 = _Vertices[_Indices[i+1]],
-                    v2 = _Vertices[_Indices[i+2]],
-                    n0 = _Normals[_Indices[i]],
-                    n1 = _Normals[_Indices[i+1]],
-                    n2 = _Normals[_Indices[i+2]];
+                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]],
+                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]],
+                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]],
+                    n0 = _Normals[triangleIndex.x + _VerticesOffsets[index]],
+                    n1 = _Normals[triangleIndex.y + _VerticesOffsets[index]],
+                    n2 = _Normals[triangleIndex.z + _VerticesOffsets[index]];
 
                 Trisect tri = CreateTrisect();
-                if (Trisection(ray, v0, v1, v2, tri)) {
+                if (Trisection(localRay, v0, v1, v2, tri))
+                {
                     if (tri.t > 0 && tri.t < bestHit.distance)
                     {
                         bestHit.distance = tri.t;
-                        bestHit.position = ray.origin + tri.t * ray.direction;
+                        bestHit.position = localRay.origin + tri.t * localRay.direction;
 
                         // interpolate normals
                         float w = 1 - tri.u - tri.v;
                         bestHit.normal = (tri.u*n1) + (tri.v * n2) + (w * n0);
 
                         // get mesh mat
-                        TriMeshMaterial triMat = _TriMeshMats[_MatIndices[i]];
+                        TriMeshMaterial triMat = _TriMeshMats[index];
                         bestHit.albedo = triMat.albedo;
                         bestHit.specular = triMat.specular;
                         bestHit.emission = triMat.emission;
                     }
                 }
             }
-        } else { // inner node
-            if (stackTop + 1 >= MAX_BVH_DEPTH) return;
-            int leftIndex = node.leftOrCount;
-            int rightIndex = node.rightOrOffset;
-
-            // push nodes onto stack. traverse left branches first
-            nodeStack[++stackTop] = rightIndex; 
-            nodeStack[++stackTop] = leftIndex; 
         }
-    }
+        else
+        {
+            for(int i = 0; i < hitCount; i++)
+            {
+                stack[top++] = hitData[i];
+            }
+        }
+    } while (top > 0);
 }
 
+void IntersectTLAS(Ray ray, inout RayHit bestHit)
+{
+    int stack[MAX_BVH_STACK];
+    int top = 0;
+    stack[top++] = 1;
+    do
+    {
+        BoundingVolumeHierarchyNode node = _TLAS[stack[--top]];
+        bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance);
+        int4 hitData;
+        int hitCount = compress(hitData, 0, node.Data, hitMask);
+
+        if (node.Flags != 0)
+        {
+            for (int i = 0; i < hitCount; i++)
+            {
+                IntersectBLAS(ray, hitData[i], bestHit);
+            }
+        }
+        else
+        {
+            for(int i = 0; i < hitCount; i++)
+            {
+                stack[top++] = hitData[i];
+            }
+        }
+    } while (top > 0);
+}
 
 RayHit Trace(Ray ray) // populate bestHit
 {
     RayHit bestHit = CreateRayHit();
-    IntersectBVH(ray, bestHit);
+    // IntersectTLAS(ray, bestHit);
     return bestHit;
 }
 
@@ -352,9 +395,6 @@ float3 Shade(inout Ray ray, inout RayHit hit)
     {
         // no hit, set energy to 0
         ray.energy = float3(0.0f, 0.0f, 0.0f);
-        // darkness
-        if (_SkyboxEnabled == 0)
-            return float3(0, 0, 0);
         // Sample the skybox and write it
         float theta = acos(ray.direction.y) / -PI;
         float phi = atan2(ray.direction.x, -ray.direction.z) / -PI * 0.5f;
@@ -382,15 +422,13 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float3 result = float3(0, 0, 0);
     for (int i = 0; i < _MaxReflections /* max num reflections */; i++)
     {
-        // update ray invDir (for AABB test)
-        ray.invDir = 1.0f / ray.direction;
         RayHit hit = Trace(ray);
         // ORDER MATTERS! energy between hit point and origin.
-            // multiply energy at current ray path with light emitted at hit point
+        // multiply energy at current ray path with light emitted at hit point
         result += ray.energy * Shade(ray, hit);
-            // then update ray energy to account attenuation at hit point
-        if (!any(ray.energy))
-            break;
+        // then update ray energy to account attenuation at hit point
+        // if (!any(ray.energy))
+        //     break;
     }
     Result[id.xy] = float4(result, 1);
 }
