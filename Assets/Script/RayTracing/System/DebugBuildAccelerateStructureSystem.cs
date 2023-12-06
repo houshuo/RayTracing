@@ -86,16 +86,23 @@ namespace Script.RayTracing
                     continue;
                 
                 BoundingVolumeHierarchy.Node node = nodes[index + offset];
-                for (int i = 0; i < 4; i++)
-                {
-                    if(node.IsLeafValid(i))
-                        DrawAABB(node.Bounds.GetAabb(i), node.IsLeaf ? Color.yellow : Color.white, localToWorld);
-                }
-                
+
                 if (!node.IsLeaf)
                 {
                     for (int i = 0; i < 4; i++)
                         stack[top++] = node.Data[i];
+                }
+                else
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if (node.IsLeafValid(i))
+                        {
+                            float level = math.min(1, top / 64f);
+                            DrawAABB(node.Bounds.GetAabb(i), new Color(level, level, level, 1f), localToWorld);
+                        }
+                        
+                    }
                 }
             } while (top > 0);
         }
