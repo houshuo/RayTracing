@@ -34,9 +34,6 @@ namespace Script.RayTracing
         //PerObjects Vertices
         private ComputeBuffer ObjectsVerticesOffsetBuffer;
         private ComputeBuffer ObjectsVerticesBuffer;
-        //PerObjects Normals
-        private ComputeBuffer ObjectsNormalsOffsetBuffer;
-        private ComputeBuffer ObjectsNormalsBuffer;
         //PerObjects Triangle Indices
         private ComputeBuffer ObjectsTrianglesOffsetBuffer;
         private ComputeBuffer ObjectsTrianglesBuffer;
@@ -95,8 +92,6 @@ namespace Script.RayTracing
                 cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", pass.ObjectsVerticesOffsetBuffer);
                 PrepareComputeBuffer(ref pass.ObjectsVerticesBuffer, buildAccelerateStructureSystem.ObjectsVerticesBuffer);
                 cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", pass.ObjectsVerticesBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsNormalsBuffer, buildAccelerateStructureSystem.ObjectsNormalsBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Normals", pass.ObjectsNormalsBuffer);
                 PrepareComputeBuffer(ref pass.ObjectsTrianglesOffsetBuffer, buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
                 cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", pass.ObjectsTrianglesOffsetBuffer);
                 PrepareComputeBuffer(ref pass.ObjectsTrianglesBuffer, buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
@@ -117,7 +112,7 @@ namespace Script.RayTracing
                     var buildAccelerateStructureSystem =
                         World.DefaultGameObjectInjectionWorld.Unmanaged.GetUnsafeSystemRef<BuildAccelerateStructureSystem>(
                             buildAccelerateStructureSystemHandle);
-                    if (!buildAccelerateStructureSystem.EmptyScene)
+                    if (buildAccelerateStructureSystem.ObjectsCount > 0)
                     {
                         // Set the target and dispatch the compute shader
                         SetShaderParametersPerUpdate(ref renderingData, buildAccelerateStructureSystem, cmd);
@@ -164,8 +159,6 @@ namespace Script.RayTracing
             DestroyComputeBuffer(ref ObjectsBVHBuffer);
             DestroyComputeBuffer(ref ObjectsVerticesOffsetBuffer);
             DestroyComputeBuffer(ref ObjectsVerticesBuffer);
-            DestroyComputeBuffer(ref ObjectsNormalsOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsNormalsBuffer);
             DestroyComputeBuffer(ref ObjectsTrianglesOffsetBuffer);
             DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
             DestroyComputeBuffer(ref ObjectsMaterialBuffer);

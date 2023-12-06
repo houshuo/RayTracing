@@ -96,8 +96,12 @@ StructuredBuffer<int> _BLASOffsets;
 StructuredBuffer<BoundingVolumeHierarchyNode> _BLAS;
 // Triangle meshes
 StructuredBuffer<int> _VerticesOffsets;
-StructuredBuffer<float3> _Vertices;
-StructuredBuffer<float3> _Normals;
+struct Vertex
+{
+    float3 position;
+    float3 normal;
+};
+StructuredBuffer<Vertex> _Vertices;
 StructuredBuffer<int> _TrianglesOffsets;
 StructuredBuffer<int3> _Triangles;
 //Per Object Property
@@ -273,12 +277,12 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             {
                 int3 triangleIndex = _Triangles[node.Data[i] + _TrianglesOffsets[index]];
                 float3
-                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]],
-                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]],
-                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]],
-                    n0 = _Normals[triangleIndex.x + _VerticesOffsets[index]],
-                    n1 = _Normals[triangleIndex.y + _VerticesOffsets[index]],
-                    n2 = _Normals[triangleIndex.z + _VerticesOffsets[index]];
+                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]].position,
+                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]].position,
+                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]].position,
+                    n0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]].normal,
+                    n1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]].normal,
+                    n2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]].normal;
 
                 Trisect tri = CreateTrisect();
                 if (Trisection(localRay, v0, v1, v2, tri))

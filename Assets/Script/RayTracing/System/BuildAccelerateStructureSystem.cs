@@ -11,7 +11,6 @@ namespace Script.RayTracing
     [UpdateInGroup(typeof(PresentationSystemGroup))]
     public partial struct BuildAccelerateStructureSystem : ISystem
     {
-        public bool EmptyScene ;
         //TLAS
         private TopLevelAccelerateStructure TLAS;
 
@@ -19,19 +18,26 @@ namespace Script.RayTracing
         {
             get { return TLAS.Nodes; }
         }
+        
+        public int TLASNodeCount
+        {
+            get { return TLAS.NodeCount; }
+        }
+
+        public int ObjectsCount;
         //PerObjects BVH
         public NativeArray<int> ObjectsBVHOffsetBuffer;
         public NativeArray<BoundingVolumeHierarchy.Node> ObjectsBVHBuffer;
         //PerObjects Vertices
         public NativeArray<int> ObjectsVerticesOffsetBuffer;
-        public NativeArray<float3> ObjectsVerticesBuffer;
-        public NativeArray<float3> ObjectsNormalsBuffer;
+        public NativeArray<Vertex> ObjectsVerticesBuffer;
         //PerObjects Triangle Indices
         public NativeArray<int> ObjectsTrianglesOffsetBuffer;
         public NativeArray<int3> ObjectsTrianglesBuffer;
         //PerObjects Properties
         public NativeArray<RayTraceMaterial> ObjectsMaterialBuffer;
         public NativeArray<float4x4> ObjectsWorldToLocalBuffer;
+        public NativeArray<float4x4> ObjectsLocalToWorldBuffer;
         
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -50,8 +56,8 @@ namespace Script.RayTracing
             var rayTraceables =
                 rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(state.WorldUpdateAllocator);
 
-            EmptyScene = rayTraceables.Length == 0;
-            if (EmptyScene)
+            ObjectsCount = rayTraceables.Length;
+            if (ObjectsCount == 0)
                 return;
             
             //Calculate total nodes and build BLAS offsets
@@ -91,8 +97,6 @@ namespace Script.RayTracing
             buildTLASJob.blasVerticesOffsets = ObjectsVerticesOffsetBuffer;
             PrepareNativeArray(ref ObjectsVerticesBuffer, totalVerticesCount);
             buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer;
-            PrepareNativeArray(ref ObjectsNormalsBuffer, totalVerticesCount);
-            buildTLASJob.blasNormalsArray = ObjectsNormalsBuffer;
             
             buildTLASJob.blasTriangleOffsets = ObjectsTrianglesOffsetBuffer;
             PrepareNativeArray(ref ObjectsTrianglesBuffer, totalTrianglesCount);
@@ -102,6 +106,8 @@ namespace Script.RayTracing
             buildTLASJob.blasMaterials = ObjectsMaterialBuffer;
             PrepareNativeArray(ref ObjectsWorldToLocalBuffer, rayTraceables.Length);
             buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer;
+            PrepareNativeArray(ref ObjectsLocalToWorldBuffer, rayTraceables.Length);
+            buildTLASJob.blasLocalToWorld = ObjectsLocalToWorldBuffer;
             var jobHandle = buildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
             //build TLAS
             TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle).Complete();
@@ -115,7 +121,6 @@ namespace Script.RayTracing
             DestroyNativeArray(ref ObjectsBVHBuffer);
             DestroyNativeArray(ref ObjectsVerticesOffsetBuffer);
             DestroyNativeArray(ref ObjectsVerticesBuffer);
-            DestroyNativeArray(ref ObjectsNormalsBuffer);
             DestroyNativeArray(ref ObjectsTrianglesOffsetBuffer);
             DestroyNativeArray(ref ObjectsTrianglesBuffer);
             DestroyNativeArray(ref ObjectsMaterialBuffer);
@@ -153,14 +158,14 @@ namespace Script.RayTracing
         [NativeDisableContainerSafetyRestriction] public NativeArray<BoundingVolumeHierarchy.Node> blasBVHArray;
         //Vertices+Normals
         [ReadOnly] public NativeArray<int> blasVerticesOffsets;
-        [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasVerticesArray;
-        [NativeDisableContainerSafetyRestriction] public NativeArray<float3> blasNormalsArray;
+        [NativeDisableContainerSafetyRestriction] public NativeArray<Vertex> blasVerticesArray;
         //Indices
         [ReadOnly] public NativeArray<int> blasTriangleOffsets;
         [NativeDisableContainerSafetyRestriction] public NativeArray<int3> blasTriangleArray;
         //Per Object Properties
         public NativeArray<RayTraceMaterial> blasMaterials;
         public NativeArray<float4x4> blasWorldToLocal;
+        public NativeArray<float4x4> blasLocalToWorld;
         void Execute([EntityIndexInQuery] int entityIndexInQuery, in LocalToWorld transform, in RayTraceableComponent rayTraceable)
         {
             ref BottomLevelAccelerateStructure blas = ref rayTraceable.BLAS.Value;
@@ -199,12 +204,7 @@ namespace Script.RayTracing
             int verticesOffset = blasVerticesOffsets[entityIndexInQuery];
             for (int i = 0; i < mesh.vertices.Length; i++)
             {
-                blasVerticesArray[i + verticesOffset] = mesh.vertices[i];
-            }
-            
-            for (int i = 0; i < mesh.normals.Length; i++)
-            {
-                blasNormalsArray[i + verticesOffset] = mesh.normals[i];
+                blasVerticesArray[i + verticesOffset] = new Vertex(){position = mesh.vertices[i], normal = mesh.normals[i]};
             }
             
             int triangleOffset = blasTriangleOffsets[entityIndexInQuery];
@@ -220,6 +220,7 @@ namespace Script.RayTracing
                 specular = rayTraceable.specular,
                 emission = rayTraceable.emission
             };
+            blasLocalToWorld[entityIndexInQuery] = transform.Value;
             blasWorldToLocal[entityIndexInQuery] = math.inverse(transform.Value);
         }
     }
