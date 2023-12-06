@@ -24,7 +24,6 @@ namespace Script.RayTracing
             public int randomSeed;
             public ComputeShader RayTracingShader;
             public Texture SkyBoxTextures;
-            public int MaxReflections = 2;
             public float RTDownScaling;
         }
         public RayTraceSettings settings = new RayTraceSettings();
@@ -68,41 +67,6 @@ namespace Script.RayTracing
                 cmd.ClearRandomWriteTargets();
             }
 
-            private void SetShaderParametersPerUpdate(ref RenderingData renderingData, BuildAccelerateStructureSystem buildAccelerateStructureSystem, CommandBuffer cmd)
-            {
-                Camera camera = renderingData.cameraData.camera;
-                cmd.SetComputeMatrixParam(pass.settings.RayTracingShader, "_CameraToWorld", camera.cameraToWorldMatrix);
-                cmd.SetComputeMatrixParam(pass.settings.RayTracingShader,"_CameraInverseProjection", camera.projectionMatrix.inverse);
-                cmd.SetComputeVectorParam(pass.settings.RayTracingShader,"_PixelOffset", new Vector2(Random.value, Random.value));
-                cmd.SetComputeIntParam(pass.settings.RayTracingShader,"_MaxReflections", pass.settings.MaxReflections);
-                // rng
-                cmd.SetComputeFloatParam(pass.settings.RayTracingShader,"_Seed", Random.value);
-                //skybox
-                cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
-                //TLAS
-                PrepareComputeBuffer(ref pass.TLASBuffer, buildAccelerateStructureSystem.TLASBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TLAS", pass.TLASBuffer);
-                //BLAS
-                PrepareComputeBuffer(ref pass.ObjectsBVHOffsetBuffer, buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLASOffsets", pass.ObjectsBVHOffsetBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsBVHBuffer, buildAccelerateStructureSystem.ObjectsBVHBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLAS", pass.ObjectsBVHBuffer);
-                //Triangle Mesh
-                PrepareComputeBuffer(ref pass.ObjectsVerticesOffsetBuffer, buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", pass.ObjectsVerticesOffsetBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsVerticesBuffer, buildAccelerateStructureSystem.ObjectsVerticesBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", pass.ObjectsVerticesBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsTrianglesOffsetBuffer, buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", pass.ObjectsTrianglesOffsetBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsTrianglesBuffer, buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", pass.ObjectsTrianglesBuffer);
-                //Per Object Property
-                PrepareComputeBuffer(ref pass.ObjectsMaterialBuffer, buildAccelerateStructureSystem.ObjectsMaterialBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", pass.ObjectsMaterialBuffer);
-                PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
-                cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
-            }
-            
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 CommandBuffer cmd = CommandBufferPool.Get(profilerTag);
@@ -115,8 +79,40 @@ namespace Script.RayTracing
                     if (buildAccelerateStructureSystem.ObjectsCount > 0)
                     {
                         // Set the target and dispatch the compute shader
-                        SetShaderParametersPerUpdate(ref renderingData, buildAccelerateStructureSystem, cmd);
+                        Camera camera = renderingData.cameraData.camera;
+                        cmd.SetComputeMatrixParam(pass.settings.RayTracingShader, "_CameraToWorld", camera.cameraToWorldMatrix);
+                        cmd.SetComputeMatrixParam(pass.settings.RayTracingShader,"_CameraInverseProjection", camera.projectionMatrix.inverse);
+                        // cmd.SetComputeVectorParam(pass.settings.RayTracingShader,"_PixelOffset", new Vector2(Random.value, Random.value));
+                        Vector4 cameraPosition = camera.transform.position;
+                        cmd.SetComputeVectorParam(pass.settings.RayTracingShader, "_CameraPosition", cameraPosition);
+                        // rng
+                        cmd.SetComputeFloatParam(pass.settings.RayTracingShader,"_Seed", Random.value);
+                        //skybox
+                        cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
+                        //TLAS
+                        PrepareComputeBuffer(ref pass.TLASBuffer, buildAccelerateStructureSystem.TLASBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TLAS", pass.TLASBuffer);
+                        //BLAS
+                        PrepareComputeBuffer(ref pass.ObjectsBVHOffsetBuffer, buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLASOffsets", pass.ObjectsBVHOffsetBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsBVHBuffer, buildAccelerateStructureSystem.ObjectsBVHBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLAS", pass.ObjectsBVHBuffer);
+                        //Triangle Mesh
+                        PrepareComputeBuffer(ref pass.ObjectsVerticesOffsetBuffer, buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", pass.ObjectsVerticesOffsetBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsVerticesBuffer, buildAccelerateStructureSystem.ObjectsVerticesBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", pass.ObjectsVerticesBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsTrianglesOffsetBuffer, buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", pass.ObjectsTrianglesOffsetBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsTrianglesBuffer, buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", pass.ObjectsTrianglesBuffer);
+                        //Per Object Property
+                        PrepareComputeBuffer(ref pass.ObjectsMaterialBuffer, buildAccelerateStructureSystem.ObjectsMaterialBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", pass.ObjectsMaterialBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
                         cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
+                        //Dispatch
                         cmd.DispatchCompute(pass.settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
                     }
                 }

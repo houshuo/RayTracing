@@ -1,3 +1,4 @@
+#pragma enable_d3d11_debug_symbols
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
 
@@ -271,21 +272,19 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         [unroll]
         for (int i = 0; i < 4; i++)
         {
-            if(!hitMask[i])
+            if(node.Data[i] <= 0 || !hitMask[i])
                 continue;
-            if (node.Flags != 0)
+            if (node.Flags != 0 && node.Data[i] == -1)
             {
+
                 int3 triangleIndex = _Triangles[node.Data[i] + _TrianglesOffsets[index]];
-                float3
-                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]].position,
-                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]].position,
-                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]].position,
-                    n0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]].normal,
-                    n1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]].normal,
-                    n2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]].normal;
+                Vertex
+                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]],
+                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]],
+                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]];
 
                 Trisect tri = CreateTrisect();
-                if (Trisection(localRay, v0, v1, v2, tri))
+                if (Trisection(localRay, v0.position, v1.position, v2.position, tri))
                 {
                     if (tri.t > 0 && tri.t < bestHit.distance)
                     {
@@ -294,7 +293,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 
                         // interpolate normals
                         float w = 1 - tri.u - tri.v;
-                        bestHit.normal = (tri.u*n1) + (tri.v * n2) + (w * n0);
+                        bestHit.normal = (tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal);
 
                         // get mesh mat
                         TriMeshMaterial triMat = _TriMeshMats[index];
@@ -326,11 +325,12 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
         [unroll]
         for (int i = 0; i < 4; i++)
         {
-            if(!hitMask[i])
+            if(node.Data[i] <= 0 || !hitMask[i])
                 continue;
             if (node.Flags != 0)
             {
-                IntersectBLAS(ray, node.Data[i], bestHit);
+                // IntersectBLAS(ray, node.Data[i], bestHit);
+                bestHit.distance = 1;
             }
             else
             {
@@ -343,7 +343,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
 RayHit Trace(Ray ray) // populate bestHit
 {
     RayHit bestHit = CreateRayHit();
-    IntersectBLAS(ray, 0, bestHit);
+    IntersectBLAS(ray, 1, bestHit);
     return bestHit;
 }
 
@@ -406,7 +406,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     // Path Trace and shade
     float3 result = float3(0, 0, 0);
     [unroll]
-    for (int i = 0; i < _MaxReflections /* max num reflections */; i++)
+    for (int i = 0; i < 2 /* max num reflections */; i++)
     {
         RayHit hit = Trace(ray);
         // ORDER MATTERS! energy between hit point and origin.
