@@ -20,7 +20,7 @@ namespace Script.RayTracing
     {
         public float4x4 CameraToWorld;
         public float4x4 CameraInverseProjection;
-        public float2 Pixel;
+        public float2 PixelOffset;
         public float Seed;
     };
 }

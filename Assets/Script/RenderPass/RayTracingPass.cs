@@ -27,6 +27,8 @@ namespace Script.RayTracing
             public float RTDownScaling;
         }
         public RayTraceSettings settings = new RayTraceSettings();
+        //Constant Buffer
+        private ComputeBuffer FrameConsts;
         //PerObjects BVH
         private ComputeBuffer ObjectsBVHOffsetBuffer;
         private ComputeBuffer ObjectsBVHBuffer;
@@ -80,13 +82,17 @@ namespace Script.RayTracing
                     {
                         // Set the target and dispatch the compute shader
                         Camera camera = renderingData.cameraData.camera;
-                        cmd.SetComputeMatrixParam(pass.settings.RayTracingShader, "_CameraToWorld", camera.cameraToWorldMatrix);
-                        cmd.SetComputeMatrixParam(pass.settings.RayTracingShader,"_CameraInverseProjection", camera.projectionMatrix.inverse);
-                        // cmd.SetComputeVectorParam(pass.settings.RayTracingShader,"_PixelOffset", new Vector2(Random.value, Random.value));
-                        Vector4 cameraPosition = camera.transform.position;
-                        cmd.SetComputeVectorParam(pass.settings.RayTracingShader, "_CameraPosition", cameraPosition);
-                        // rng
-                        cmd.SetComputeFloatParam(pass.settings.RayTracingShader,"_Seed", Random.value);
+                        FrameCBuffer cbuffer = new FrameCBuffer()
+                        {
+                            CameraInverseProjection = camera.projectionMatrix.inverse,
+                            CameraToWorld = camera.cameraToWorldMatrix,
+                            PixelOffset = new Vector2(Random.value, Random.value),
+                            Seed = Random.value
+                        };
+                        var cBufferArray = pass.FrameConsts.BeginWrite<FrameCBuffer>(0, 1);
+                        cBufferArray[0] = cbuffer;
+                        pass.FrameConsts.EndWrite<FrameCBuffer>(1);
+                        cmd.SetComputeConstantBufferParam(pass.settings.RayTracingShader, "FrameCBuffer", pass.FrameConsts, 0, Marshal.SizeOf<FrameCBuffer>());
                         //skybox
                         cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
                         //TLAS
@@ -136,6 +142,7 @@ namespace Script.RayTracing
             scriptablePass = new CustomRenderPass("RayTracePass");
             scriptablePass.pass = this;
             scriptablePass.renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
+            FrameConsts = new ComputeBuffer(1, Marshal.SizeOf<FrameCBuffer>(), ComputeBufferType.Constant, ComputeBufferMode.SubUpdates);
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -160,6 +167,7 @@ namespace Script.RayTracing
             DestroyComputeBuffer(ref ObjectsMaterialBuffer);
             DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
             DestroyComputeBuffer(ref TLASBuffer);
+            DestroyComputeBuffer(ref FrameConsts);
         }
         
         private static void PrepareComputeBuffer<T>(ref ComputeBuffer buffer, in NativeArray<T> array) where T : struct

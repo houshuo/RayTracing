@@ -5,17 +5,21 @@
 // Create a RenderTexture with enableRandomWrite flag and set it
 // with cs.SetTexture
 RWTexture2D<float4> Result;
-float4x4 _CameraToWorld;
-float4x4 _CameraInverseProjection;
+cbuffer FrameCBuffer
+{
+    //Camera
+    float4x4 _CameraToWorld;
+    float4x4 _CameraInverseProjection;
+    // random jitter for anti-aliasing
+    float2 _PixelOffset;
+    //Rnd
+    float _Seed;
+}
 
 // skybox
 Texture2D<float4> _SkyboxTexture;
 SamplerState sampler_SkyboxTexture;
 static const float PI = 3.14159265f;
-
-// random jitter for anti-aliasing
-float2 _PixelOffset;
-int _MaxReflections;
 
 /*========== Utility ============*/
 static const float EPSILON = 1e-8;
@@ -41,12 +45,7 @@ float energy(float3 color)
     return dot(color, 1.0f / 3.0f);
 }
 /*==========RNG============*/
-float2 pixel;
-
-// uint rng_state;
-float _Seed;
-
-float rand()
+float rand(float2 pixel)
 {
     float result = frac(sin(_Seed / 100.0f * dot(pixel, float2(12.9898f, 78.233f))) * 43758.5453f);
     _Seed += 1.0f;
@@ -63,12 +62,12 @@ float hash12(float2 p)
 }
 
 // ref: http://corysimon.github.io/articles/uniformdistn-on-sphere/
-float3 SampleHemisphere(float3 normal)
+float3 SampleHemisphere(float2 pixel, float3 normal)
 {
     // Uniformly sample hemisphere direction
-    float cosTheta = rand();
+    float cosTheta = rand(pixel);
     float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
-    float phi = 2 * PI * rand();
+    float phi = 2 * PI * rand(pixel);
     float3 tangentSpaceDir = float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
     // Transform direction to world space
     return mul(tangentSpaceDir, GetTangentSpace(normal));
@@ -329,8 +328,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
                 continue;
             if (node.Flags != 0)
             {
-                // IntersectBLAS(ray, node.Data[i], bestHit);
-                bestHit.distance = 1;
+                IntersectBLAS(ray, node.Data[i], bestHit);
             }
             else
             {
@@ -343,11 +341,11 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
 RayHit Trace(Ray ray) // populate bestHit
 {
     RayHit bestHit = CreateRayHit();
-    IntersectBLAS(ray, 1, bestHit);
+    IntersectTLAS(ray, bestHit);
     return bestHit;
 }
 
-float3 Shade(inout Ray ray, inout RayHit hit)
+float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
 {
     if (hit.distance < 1.#INF)
     {
@@ -359,7 +357,7 @@ float3 Shade(inout Ray ray, inout RayHit hit)
         specChance /= sum;
         diffChance /= sum;
         // Roulette-select the ray's path
-        float roulette = rand();
+        float roulette = rand(pixel);
         if (roulette < specChance)
         {
             // Specular reflection
@@ -371,7 +369,7 @@ float3 Shade(inout Ray ray, inout RayHit hit)
         {
             // Diffuse reflection
             ray.origin = hit.position + hit.normal * 0.001f;
-            ray.direction = SampleHemisphere(hit.normal);
+            ray.direction = SampleHemisphere(pixel, hit.normal);
             ray.energy *= (1.0f / diffChance) * 2 * hit.albedo * sdot(hit.normal, ray.direction);
         }
 
@@ -391,7 +389,6 @@ float3 Shade(inout Ray ray, inout RayHit hit)
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
-    pixel = id.xy;
     // Get the dimensions of the RenderTexture
     uint width, height;
     Result.GetDimensions(width, height);
@@ -411,7 +408,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
         RayHit hit = Trace(ray);
         // ORDER MATTERS! energy between hit point and origin.
         // multiply energy at current ray path with light emitted at hit point
-        result += ray.energy * Shade(ray, hit);
+        result += ray.energy * Shade(id.xy, ray, hit);
         // then update ray energy to account attenuation at hit point
         if (!any(ray.energy))
             break;
