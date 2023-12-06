@@ -328,7 +328,8 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
                 continue;
             if (node.Flags != 0)
             {
-                IntersectBLAS(ray, node.Data[i], bestHit);
+                // IntersectBLAS(ray, node.Data[i], bestHit);
+                bestHit.distance = 1;
             }
             else
             {
