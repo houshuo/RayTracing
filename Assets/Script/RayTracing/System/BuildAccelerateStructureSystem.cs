@@ -175,7 +175,7 @@ namespace Script.RayTracing
             float3 center = aabb.Center;
             pointAndIndex[entityIndexInQuery] = new BoundingVolumeHierarchy.PointAndIndex()
                 { Position = center, Index = entityIndexInQuery };
-            float3 extents = aabb.Extents;
+            float3 extents = aabb.Extents * 0.5f;
             float3 c0 = transform.Value.TransformPoint(center + extents * new float3(1, 1, 1));
             float3 c1 = transform.Value.TransformPoint(center + extents * new float3(1, 1, -1));
             float3 c2 = transform.Value.TransformPoint(center + extents * new float3(1, -1, 1));

@@ -17,7 +17,7 @@ namespace Script.RayTracing
         {
         }
 
-        // [BurstCompile]
+        [BurstCompile]
         public unsafe void OnUpdate(ref SystemState state)
         {
             //Query RayTraceable
