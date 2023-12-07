@@ -726,10 +726,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7737b635b6061241b1666e63fabb15e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  fov: 0
-  minFov: 1
-  maxFov: 90
-  sensitivity: 5
   mainSpeed: 50
   camSens: 0.15
   shiftAdd: 100
