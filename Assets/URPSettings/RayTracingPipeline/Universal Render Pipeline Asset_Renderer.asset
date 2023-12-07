@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: edc720446caa1214b9142d4c935acb93, type: 3}
   m_Name: RayTracingPass
   m_EditorClassIdentifier: 
-  m_Active: 1
+  m_Active: 0
   settings:
     randomSeed: 323424
     RayTracingShader: {fileID: 7200000, guid: c4e6758be8dda491696a52d390b1d2bb, type: 3}

@@ -18,7 +18,7 @@ namespace Script.RayTracing
             // state.Enabled = false;
         }
 
-        [BurstCompile]
+        // [BurstCompile]
         public unsafe void OnUpdate(ref SystemState state)
         {
             //Query RayTraceable
@@ -37,8 +37,10 @@ namespace Script.RayTracing
             DrawBVH(TLASNodes, 0, float4x4.identity);
             for (int i = 0; i < buildAccelerateStructureSystem.ObjectsCount; i++)
             {
-                int bvhOffset = buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer[i];
-                DrawBVH(buildAccelerateStructureSystem.ObjectsBVHBuffer, bvhOffset, buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer[i]);
+                DrawBVHTriangle(buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer[i],buildAccelerateStructureSystem.ObjectsBVHBuffer, 
+                    buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsTrianglesBuffer,
+                    buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsVerticesBuffer,
+                    buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer[i]);
             }
         }
 
@@ -73,8 +75,20 @@ namespace Script.RayTracing
             Debug.DrawLine(v2, v6, c);
             Debug.DrawLine(v3, v7, c);
         }
+        
+        private static void DrawTriangle(float3 v0, float3 v1, float3 v2, Color c, float4x4 localToWorld)
+        {
+            v0 = math.transform(localToWorld, v0);
+            v1 = math.transform(localToWorld, v1);
+            v2 = math.transform(localToWorld, v2);
+            Debug.DrawLine(v0, v1, c);
+            Debug.DrawLine(v1, v2, c);
+            Debug.DrawLine(v2, v0, c);
+        }
 
-        private static unsafe void DrawBVH(NativeArray<BoundingVolumeHierarchy.Node> nodes, int offset, float4x4 localToWorld)
+        private static unsafe void DrawBVH(NativeArray<BoundingVolumeHierarchy.Node> nodes, int offset, 
+            
+            float4x4 localToWorld)
         {
             int* stack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
             int top = 0;
@@ -102,6 +116,47 @@ namespace Script.RayTracing
                             DrawAABB(node.Bounds.GetAabb(i), new Color(level, level, level, 1f), localToWorld);
                         }
                         
+                    }
+                }
+            } while (top > 0);
+        }
+        
+        private static unsafe void DrawBVHTriangle(int bvhOffset, NativeArray<BoundingVolumeHierarchy.Node> nodes, 
+            int trianglesOffset, NativeArray<int3> trianglesArray,
+            int verticesOffset, NativeArray<Vertex> verticesArray,
+            float4x4 localToWorld)
+        {
+            int* stack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
+            int top = 0;
+            stack[top++] = 1;
+            do
+            {
+                int index = stack[--top];
+                BoundingVolumeHierarchy.Node node = nodes[index + bvhOffset];
+
+                if (!node.IsLeaf)
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if (node.Data[i] != 0)
+                        {
+                            stack[top++] = node.Data[i];
+                        }
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if (node.Data[i] != -1)
+                        {
+                            int triangleIndex = node.Data[i] + trianglesOffset;
+                            int3 triangle = trianglesArray[triangleIndex];
+                            var v0 = verticesArray[triangle.x + verticesOffset];
+                            var v1 = verticesArray[triangle.y + verticesOffset];
+                            var v2 = verticesArray[triangle.z + verticesOffset];
+                            DrawTriangle(v0.position, v1.position, v2.position,  Color.yellow, localToWorld);
+                        }
                     }
                 }
             } while (top > 0);

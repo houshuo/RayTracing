@@ -269,8 +269,9 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 {
     int blasOffset = _BLASOffsets[index];
     
-    float4x4 worldToLocal = _WorldToLocalMatrices[index];
-    Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
+    // float4x4 worldToLocal = _WorldToLocalMatrices[index];
+    // Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
+    Ray localRay = ray;
 
     int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
@@ -281,7 +282,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         top--;
         int topIndex = GetInt4ByIndex(stack[top >> 2], top & 4);
         BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
-        if(node.Flags == 0)
+        if(node.Flags == 0) //Internal
         {
             float4 hitDistance;
             bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance, hitDistance);
@@ -295,7 +296,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                 top++;
             }
         }
-        else
+        else //Leaf
         {
             [unroll]
             for (int i = 0; i < 4; i++)
@@ -303,9 +304,10 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                 int childNodeIndex = node.Data[i];
                 if(childNodeIndex == -1)
                     continue;
-                
-                int3 triangleIndex = _Triangles[childNodeIndex + _TrianglesOffsets[index]];
+
+                int triangleOffset = _TrianglesOffsets[index];
                 int vertexOffset = _VerticesOffsets[index];
+                int3 triangleIndex = _Triangles[childNodeIndex + triangleOffset];
                 Vertex
                     v0 = _Vertices[triangleIndex.x + vertexOffset],
                     v1 = _Vertices[triangleIndex.y + vertexOffset],

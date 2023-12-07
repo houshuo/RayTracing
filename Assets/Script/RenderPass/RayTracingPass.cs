@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -182,7 +183,7 @@ namespace Script.RayTracing
             {
                 buffer = new ComputeBuffer(array.Length, Marshal.SizeOf<T>(), ComputeBufferType.Structured, ComputeBufferMode.SubUpdates);
             }
-
+            
             var bufferArray = buffer.BeginWrite<T>(0, array.Length);
             NativeArray<T>.Copy(array, bufferArray, array.Length);
             buffer.EndWrite<T>(array.Length);
