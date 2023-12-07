@@ -88,7 +88,8 @@ struct BoundingVolumeHierarchyNode
     int Flags;
 };
 // max array size for doing depth-first traversal of BVH
-static const uint MAX_BVH_STACK_INT4 = 64;
+static const uint MAX_BLAS_STACK_INT4 = 64;
+static const uint MAX_TLAS_STACK_INT4 = 8;
 //TLAS
 StructuredBuffer<BoundingVolumeHierarchyNode> _TLAS;
 //BLAS
@@ -276,7 +277,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     // Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
     Ray localRay = ray;
 
-    int4 stack[MAX_BVH_STACK_INT4];
+    int4 stack[MAX_BLAS_STACK_INT4];
     int top = 0;
     stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, 1);
     top++;
@@ -288,7 +289,6 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         if(node.Flags == 0) //Internal
         {
             bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
-            [unroll]
             for (int i = 0; i < 4; i++)
             {
                 int childNodeIndex = node.Data[i];
@@ -301,7 +301,6 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         }
         else //Leaf
         {
-            [unroll]
             for (int i = 0; i < 4; i++)
             {
                 int triangleIndex = node.Data[i];
@@ -340,7 +339,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 
 void IntersectTLAS(Ray ray, inout RayHit bestHit)
 {
-    int4 stack[MAX_BVH_STACK_INT4];
+    int4 stack[MAX_TLAS_STACK_INT4];
     int top = 0;
     stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, 1);
     top++;
@@ -350,21 +349,16 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
         int topIndex = GetInt4ByIndex(stack[top >> 2], top & 3);
         BoundingVolumeHierarchyNode node = _TLAS[topIndex];
         bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance);
-        [unroll]
         for (int i = 0; i < 4; i++)
         {
             if(!hitMask[i])
                 continue;
             if(node.Flags == 0) //Internal
             {
-                [unroll]
-                for (int i = 0; i < 4; i++)
+                if(node.Data[i] != 0 && hitMask[i])
                 {
-                    if(node.Data[i] != 0 && hitMask[i])
-                    {
-                        stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, node.Data[i]);
-                        top++;
-                    }
+                    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, node.Data[i]);
+                    top++;
                 }
             }
             else //Leaf
@@ -422,8 +416,7 @@ float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
 float4 Trace(float2 pixel, Ray ray) // populate bestHit
 {
     float3 result = float3(0, 0, 0);
-    [unroll]
-    for (int i = 0; i < 2 /* max num reflections */; i++)
+    for (int i = 0; i < 4 /* max num reflections */; i++)
     {
         RayHit hit = CreateRayHit();
         IntersectTLAS(ray, hit);
