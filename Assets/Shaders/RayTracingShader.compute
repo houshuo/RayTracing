@@ -319,7 +319,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             }
             else
             {
-                stack[top >> 2] = SetInt4ByIndex(top >> 2, top & 4, node.Data[i]);
+                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, node.Data[i]);
                 top++;
             }
         }
@@ -331,7 +331,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
 {
     int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
-    stack[top >> 2] = SetInt4ByIndex(top >> 2, top & 4, 1);
+    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, 1);
     top++;
     do
     {
@@ -347,11 +347,23 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
                 continue;
             if (node.Flags != 0)
             {
-                IntersectBLAS(ray, node.Data[i], bestHit);
+                bestHit.distance = 1;
+                // bestHit.position = ray.origin + hitDistance[i] * ray.direction;
+                //
+                // // interpolate normals
+                // bestHit.normal = float3(0, 1, 0);
+                //
+                // // get mesh mat
+                // TriMeshMaterial triMat = _TriMeshMats[node.Data[i]];
+                // bestHit.albedo = triMat.albedo;
+                // bestHit.specular = triMat.specular;
+                // bestHit.emission = triMat.emission;
+                
+                // IntersectBLAS(ray, node.Data[i], bestHit);
             }
             else
             {
-                stack[top >> 2] = SetInt4ByIndex(top >> 2, top & 4, node.Data[i]);
+                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, node.Data[i]);
                 top++;
             }
         }
