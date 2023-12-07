@@ -272,7 +272,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     float4x4 worldToLocal = _WorldToLocalMatrices[index];
     Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
     
-    int stack[MAX_BVH_STACK_INT4];
+    int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
     stack[top / 4] = SetInt4ByIndex(stack[top / 4], top % 4, 1);
     top++;
@@ -329,7 +329,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 
 void IntersectTLAS(Ray ray, inout RayHit bestHit)
 {
-    int stack[MAX_BVH_STACK_INT4];
+    int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
     stack[top / 4] = SetInt4ByIndex(top / 4, top % 4, 1);
     top++;
@@ -347,8 +347,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
                 continue;
             if (node.Flags != 0)
             {
-                // IntersectBLAS(ray, node.Data[i], bestHit);
-                bestHit.distance = 1;
+                IntersectBLAS(ray, node.Data[i], bestHit);
             }
             else
             {
