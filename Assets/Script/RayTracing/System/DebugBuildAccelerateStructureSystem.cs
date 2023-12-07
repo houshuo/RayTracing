@@ -86,8 +86,7 @@ namespace Script.RayTracing
             Debug.DrawLine(v2, v0, c);
         }
 
-        private static unsafe void DrawBVH(NativeArray<BoundingVolumeHierarchy.Node> nodes, int offset, 
-            
+        private static unsafe void DrawBVH(NativeArray<BoundingVolumeHierarchy.Node> nodes, int bvhOffset, 
             float4x4 localToWorld)
         {
             int* stack = stackalloc int[BoundingVolumeHierarchy.Constants.UnaryStackSize];
@@ -96,26 +95,26 @@ namespace Script.RayTracing
             do
             {
                 int index = stack[--top];
-                if (index <= 0)
-                    continue;
-                
-                BoundingVolumeHierarchy.Node node = nodes[index + offset];
+                BoundingVolumeHierarchy.Node node = nodes[index + bvhOffset];
 
                 if (!node.IsLeaf)
                 {
                     for (int i = 0; i < 4; i++)
-                        stack[top++] = node.Data[i];
+                    {
+                        if (node.Data[i] != 0)
+                        {
+                            stack[top++] = node.Data[i];
+                        }
+                    }
                 }
                 else
                 {
                     for (int i = 0; i < 4; i++)
                     {
-                        if (node.IsLeafValid(i))
+                        if (node.Data[i] != -1)
                         {
-                            float level = math.min(1, top / 64f);
-                            DrawAABB(node.Bounds.GetAabb(i), new Color(level, level, level, 1f), localToWorld);
+                            DrawAABB(node.Bounds.GetAabb(i), Color.green, localToWorld);
                         }
-                        
                     }
                 }
             } while (top > 0);
