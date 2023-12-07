@@ -22,6 +22,7 @@ namespace Script.RayTracing
         [System.Serializable]
         public class RayTraceSettings
         {
+            public int ReflectionNum;
             public int randomSeed;
             public ComputeShader RayTracingShader;
             public Texture SkyBoxTextures;
@@ -89,7 +90,8 @@ namespace Script.RayTracing
                             CameraInverseProjection = camera.projectionMatrix.inverse,
                             CameraToWorld = camera.cameraToWorldMatrix,
                             PixelOffset = new Vector2(Random.value, Random.value),
-                            Seed = Random.value
+                            Seed = Random.value,
+                            ReflectionNum = pass.settings.ReflectionNum
                         };
                         var cBufferArray = pass.FrameConsts.BeginWrite<FrameCBuffer>(0, 1);
                         cBufferArray[0] = cbuffer;
@@ -120,7 +122,7 @@ namespace Script.RayTracing
                         PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
                         cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
                         PrepareComputeBuffer(ref pass.ObjectsLocalToWorldBuffer, buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_LocalToWorldMatrices", pass.ObjectsLocalToWorldBuffer);
                         //Output
                         cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
                         //Dispatch

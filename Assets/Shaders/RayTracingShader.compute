@@ -14,6 +14,8 @@ cbuffer FrameCBuffer
     float2 _PixelOffset;
     //Rnd
     float _Seed;
+    //Reflection
+    int _ReflectNum;
 }
 
 // skybox
@@ -274,8 +276,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     TriMeshMaterial triMat = _TriMeshMats[index];
     float4x4 worldToLocal = _WorldToLocalMatrices[index];
     float4x4 localToWorld = _LocalToWorldMatrices[index];
-    // Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
-    Ray localRay = ray;
+    Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
 
     int4 stack[MAX_BLAS_STACK_INT4];
     int top = 0;
@@ -318,14 +319,13 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                         if (tri.t > 0 && tri.t < bestHit.distance)
                         {
                             bestHit.distance = tri.t;
-                            bestHit.position = localRay.origin + tri.t * localRay.direction;
+                            bestHit.position = mul(localToWorld, float4(localRay.origin + tri.t * localRay.direction, 1)).xyz;
                     
                             // interpolate normals
                             float w = 1 - tri.u - tri.v;
-                            bestHit.normal = (tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal);
+                            bestHit.normal = mul(localToWorld, float4((tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal), 0)).xyz;
                     
                             // get mesh mat
-                            TriMeshMaterial triMat = _TriMeshMats[index];
                             bestHit.albedo = triMat.albedo;
                             bestHit.specular = triMat.specular;
                             bestHit.emission = triMat.emission;
@@ -416,7 +416,7 @@ float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
 float4 Trace(float2 pixel, Ray ray) // populate bestHit
 {
     float3 result = float3(0, 0, 0);
-    for (int i = 0; i < 4 /* max num reflections */; i++)
+    for (int i = 0; i < _ReflectNum /* max num reflections */; i++)
     {
         RayHit hit = CreateRayHit();
         IntersectTLAS(ray, hit);
