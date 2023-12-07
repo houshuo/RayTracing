@@ -15,7 +15,7 @@ namespace Script.RayTracing
     {
         public void OnCreate(ref SystemState state)
         {
-            // state.Enabled = false;
+            state.Enabled = false;
         }
 
         // [BurstCompile]
@@ -154,6 +154,16 @@ namespace Script.RayTracing
                             var v0 = verticesArray[triangle.x + verticesOffset];
                             var v1 = verticesArray[triangle.y + verticesOffset];
                             var v2 = verticesArray[triangle.z + verticesOffset];
+                            
+                            float3 v0v1 = v1.position - v0.position;
+                            float3 v0v2 = v2.position - v0.position;
+                            
+                            float3 pvec = math.cross(Camera.current.transform.forward, v0v2);
+                            float det = math.dot(v0v1, pvec);
+                            // culling
+                            if (det < 0)
+                                continue;
+                            
                             DrawTriangle(v0.position, v1.position, v2.position,  Color.yellow, localToWorld);
                         }
                     }

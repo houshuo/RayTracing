@@ -112,6 +112,7 @@ struct TriMeshMaterial {
 };
 StructuredBuffer<TriMeshMaterial> _TriMeshMats;
 StructuredBuffer<float4x4> _WorldToLocalMatrices;
+StructuredBuffer<float4x4> _LocalToWorldMatrices;
 
 /*=======Ray=======*/
 struct Ray
@@ -250,7 +251,7 @@ bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction, inout float
     float4 farMin = min(min(min(farX, farY), farZ), maxFraction);
 
     hitDistance = min(nearMax, farMin);
-    return nearMax <= farMin;
+    return (nearMax <= farMin) & (lx <= hx);
 }
 
 inline int4 SetInt4ByIndex(int4 value4, int index, int value)
@@ -268,19 +269,22 @@ inline int GetInt4ByIndex(int4 value4, int index)
 void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 {
     int blasOffset = _BLASOffsets[index];
-    
-    // float4x4 worldToLocal = _WorldToLocalMatrices[index];
+    int triangleOffset = _TrianglesOffsets[index];
+    int vertexOffset = _VerticesOffsets[index];
+    TriMeshMaterial triMat = _TriMeshMats[index];
+    float4x4 worldToLocal = _WorldToLocalMatrices[index];
+    float4x4 localToWorld = _LocalToWorldMatrices[index];
     // Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
     Ray localRay = ray;
 
     int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
-    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, 1);
+    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, 1);
     top++;
     do
     {
         top--;
-        int topIndex = GetInt4ByIndex(stack[top >> 2], top & 4);
+        int topIndex = GetInt4ByIndex(stack[top >> 2], top & 3);
         BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
         if(node.Flags == 0) //Internal
         {
@@ -290,10 +294,11 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             for (int i = 0; i < 4; i++)
             {
                 int childNodeIndex = node.Data[i];
-                if(childNodeIndex == 0 || !hitMask[i])
-                    continue;
-                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, childNodeIndex);
-                top++;
+                if(childNodeIndex != 0 && hitMask[i])
+                {
+                    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, childNodeIndex);
+                    top++;
+                }
             }
         }
         else //Leaf
@@ -301,35 +306,33 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             [unroll]
             for (int i = 0; i < 4; i++)
             {
-                int childNodeIndex = node.Data[i];
-                if(childNodeIndex == -1)
-                    continue;
-
-                int triangleOffset = _TrianglesOffsets[index];
-                int vertexOffset = _VerticesOffsets[index];
-                int3 triangleIndex = _Triangles[childNodeIndex + triangleOffset];
-                Vertex
-                    v0 = _Vertices[triangleIndex.x + vertexOffset],
-                    v1 = _Vertices[triangleIndex.y + vertexOffset],
-                    v2 = _Vertices[triangleIndex.z + vertexOffset];
+                int triangleIndex = node.Data[i];
+                if(triangleIndex != -1)
+                {                    
+                    int3 aTriangle = _Triangles[triangleIndex + triangleOffset];
+                    Vertex
+                        v0 = _Vertices[aTriangle.x + vertexOffset],
+                        v1 = _Vertices[aTriangle.y + vertexOffset],
+                        v2 = _Vertices[aTriangle.z + vertexOffset];
                 
-                Trisect tri = CreateTrisect();
-                if (Trisection(localRay, v0.position, v1.position, v2.position, tri))
-                {
-                    if (tri.t > 0 && tri.t < bestHit.distance)
+                    Trisect tri = CreateTrisect();
+                    if (Trisection(localRay, v0.position, v1.position, v2.position, tri))
                     {
-                        bestHit.distance = tri.t;
-                        bestHit.position = localRay.origin + tri.t * localRay.direction;
-                
-                        // interpolate normals
-                        float w = 1 - tri.u - tri.v;
-                        bestHit.normal = (tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal);
-                
-                        // get mesh mat
-                        TriMeshMaterial triMat = _TriMeshMats[index];
-                        bestHit.albedo = triMat.albedo;
-                        bestHit.specular = triMat.specular;
-                        bestHit.emission = triMat.emission;
+                        if (tri.t > 0 && tri.t < bestHit.distance)
+                        {
+                            bestHit.distance = tri.t;
+                            bestHit.position = localRay.origin + tri.t * localRay.direction;
+                    
+                            // interpolate normals
+                            float w = 1 - tri.u - tri.v;
+                            bestHit.normal = (tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal);
+                    
+                            // get mesh mat
+                            TriMeshMaterial triMat = _TriMeshMats[index];
+                            bestHit.albedo = triMat.albedo;
+                            bestHit.specular = triMat.specular;
+                            bestHit.emission = triMat.emission;
+                        }
                     }
                 }
             }
@@ -341,12 +344,12 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
 {
     int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
-    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, 1);
+    stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, 1);
     top++;
     do
     {
         top--;
-        int topIndex = GetInt4ByIndex(stack[top >> 2], top & 4);
+        int topIndex = GetInt4ByIndex(stack[top >> 2], top & 3);
         BoundingVolumeHierarchyNode node = _TLAS[topIndex];
         float4 hitDistance;
         bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance, hitDistance);
@@ -366,7 +369,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
             }
             else
             {
-                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, childNodeIndex);
+                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, childNodeIndex);
                 top++;
             }
         }

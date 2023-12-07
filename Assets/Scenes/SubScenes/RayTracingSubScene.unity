@@ -195,6 +195,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Face (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 3294717698359959302, guid: 1a10a776cbef44caab9b6751a55159c5, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3294717698359959303, guid: 1a10a776cbef44caab9b6751a55159c5, type: 3}
       propertyPath: albedo.a
       value: 1

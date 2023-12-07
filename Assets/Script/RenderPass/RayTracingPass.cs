@@ -42,6 +42,7 @@ namespace Script.RayTracing
         //PerObjects Properties
         private ComputeBuffer ObjectsMaterialBuffer;
         private ComputeBuffer ObjectsWorldToLocalBuffer;
+        private ComputeBuffer ObjectsLocalToWorldBuffer;
         //TLAS Buffer
         private ComputeBuffer TLASBuffer;
 
@@ -118,6 +119,9 @@ namespace Script.RayTracing
                         cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", pass.ObjectsMaterialBuffer);
                         PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
                         cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
+                        PrepareComputeBuffer(ref pass.ObjectsLocalToWorldBuffer, buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer);
+                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
+                        //Output
                         cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
                         //Dispatch
                         cmd.DispatchCompute(pass.settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
@@ -167,6 +171,7 @@ namespace Script.RayTracing
             DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
             DestroyComputeBuffer(ref ObjectsMaterialBuffer);
             DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
+            DestroyComputeBuffer(ref ObjectsLocalToWorldBuffer);
             DestroyComputeBuffer(ref TLASBuffer);
             DestroyComputeBuffer(ref FrameConsts);
         }
