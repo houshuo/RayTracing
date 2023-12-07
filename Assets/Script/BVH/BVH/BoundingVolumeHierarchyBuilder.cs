@@ -28,7 +28,7 @@ namespace Script.RayTracing
         }
 
         // A node in the hierarchy
-        [StructLayout(LayoutKind.Sequential, Size = 128)]
+        [StructLayout(LayoutKind.Sequential)]
         public struct Node
         {
             public FourTransposedAabbs Bounds;

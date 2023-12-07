@@ -185,7 +185,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5508684318628574270, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5508684318628574271, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: albedo.b
@@ -287,6 +287,10 @@ PrefabInstance:
     - target: {fileID: 5508684318628574270, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: m_Name
       value: Wall
+      objectReference: {fileID: 0}
+    - target: {fileID: 5508684318628574270, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5508684318628574271, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: albedo.b
@@ -400,7 +404,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3294717698359959298, guid: 1a10a776cbef44caab9b6751a55159c5, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 26.7
       objectReference: {fileID: 0}
     - target: {fileID: 3294717698359959298, guid: 1a10a776cbef44caab9b6751a55159c5, type: 3}
       propertyPath: m_LocalRotation.w
@@ -538,6 +542,10 @@ PrefabInstance:
     - target: {fileID: 5508684318628574270, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: m_Name
       value: Wall
+      objectReference: {fileID: 0}
+    - target: {fileID: 5508684318628574270, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5508684318628574271, guid: d618286b952b149799ba24446e3c3fb6, type: 3}
       propertyPath: albedo.a

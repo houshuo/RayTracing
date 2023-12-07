@@ -88,7 +88,7 @@ struct BoundingVolumeHierarchyNode
     int Flags;
 };
 // max array size for doing depth-first traversal of BVH
-static const uint MAX_BVH_STACK = 64;
+static const uint MAX_BVH_STACK_INT4 = 64;
 //TLAS
 StructuredBuffer<BoundingVolumeHierarchyNode> _TLAS;
 //BLAS
@@ -253,6 +253,18 @@ bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction, inout float
     return nearMax <= farMin;
 }
 
+inline int4 SetInt4ByIndex(int4 value4, int index, int value)
+{
+    int value4Array[4] = {value4.x, value4.y, value4.z, value4.w};
+    value4Array[index] = value;
+    return int4(value4Array[0], value4Array[1], value4Array[2], value4Array[3]);
+}
+
+inline int GetInt4ByIndex(int4 value4, int index)
+{
+    return value4[index];
+}
+
 void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 {
     int blasOffset = _BLASOffsets[index];
@@ -260,12 +272,15 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     float4x4 worldToLocal = _WorldToLocalMatrices[index];
     Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
     
-    int stack[MAX_BVH_STACK];
+    int stack[MAX_BVH_STACK_INT4];
     int top = 0;
-    stack[top++] = 1;
+    stack[top / 4] = SetInt4ByIndex(stack[top / 4], top % 4, 1);
+    top++;
     do
     {
-        BoundingVolumeHierarchyNode node = _BLAS[stack[--top] + blasOffset];
+        top--;
+        int topIndex = GetInt4ByIndex(stack[top / 4], top % 4);
+        BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
         float4 hitDistance;
         bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance, hitDistance);
         [unroll]
@@ -304,7 +319,8 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             }
             else
             {
-                stack[top++] = node.Data[i];
+                stack[top / 4] = SetInt4ByIndex(top / 4, top % 4, node.Data[i]);
+                top++;
             }
         }
         
@@ -313,12 +329,15 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 
 void IntersectTLAS(Ray ray, inout RayHit bestHit)
 {
-    int stack[MAX_BVH_STACK];
+    int stack[MAX_BVH_STACK_INT4];
     int top = 0;
-    stack[top++] = 1;
+    stack[top / 4] = SetInt4ByIndex(top / 4, top % 4, 1);
+    top++;
     do
     {
-        BoundingVolumeHierarchyNode node = _TLAS[stack[--top]];
+        top--;
+        int topIndex = GetInt4ByIndex(stack[top / 4], top % 4);
+        BoundingVolumeHierarchyNode node = _TLAS[topIndex];
         float4 hitDistance;
         bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance, hitDistance);
         [unroll]
@@ -333,7 +352,8 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
             }
             else
             {
-                stack[top++] = node.Data[i];
+                stack[top / 4] = SetInt4ByIndex(top / 4, top % 4, node.Data[i]);
+                top++;
             }
         }
     } while (top > 0);
