@@ -221,7 +221,7 @@ bool Trisection(Ray ray, float3 v0, float3 v1, float3 v2,
     return false;
 }
 
-bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction, inout float4 hitDistance)
+bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction)
 {
     float4 lx = aabbs.Lx - ray.origin.x;
     float4 hx = aabbs.Hx - ray.origin.x;
@@ -249,8 +249,7 @@ bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction, inout float
 
     float4 nearMax = max(max(max(nearX, nearY), nearZ), 0);
     float4 farMin = min(min(min(farX, farY), farZ), maxFraction);
-
-    hitDistance = min(nearMax, farMin);
+    
     return (nearMax <= farMin) & (lx <= hx);
 }
 
@@ -288,8 +287,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
         if(node.Flags == 0) //Internal
         {
-            float4 hitDistance;
-            bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance, hitDistance);
+            bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
             [unroll]
             for (int i = 0; i < 4; i++)
             {
@@ -351,26 +349,30 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
         top--;
         int topIndex = GetInt4ByIndex(stack[top >> 2], top & 3);
         BoundingVolumeHierarchyNode node = _TLAS[topIndex];
-        float4 hitDistance;
-        bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance, hitDistance);
+        bool4 hitMask = Raycast(node.Bounds, ray, bestHit.distance);
         [unroll]
         for (int i = 0; i < 4; i++)
         {
             if(!hitMask[i])
                 continue;
-            int childNodeIndex = node.Data[i];
-            if((node.Flags == 0 && childNodeIndex == 0 ||
-                (node.Flags == 1 && childNodeIndex == -1)))
-                    continue;
-            BoundingVolumeHierarchyNode childNode = _TLAS[childNodeIndex];
-            if (childNode.Flags == 1)
+            if(node.Flags == 0) //Internal
             {
-                IntersectBLAS(ray, childNodeIndex, bestHit);
+                [unroll]
+                for (int i = 0; i < 4; i++)
+                {
+                    if(node.Data[i] != 0 && hitMask[i])
+                    {
+                        stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, node.Data[i]);
+                        top++;
+                    }
+                }
             }
-            else
+            else //Leaf
             {
-                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, childNodeIndex);
-                top++;
+                if(node.Data[i] != -1)
+                {
+                    IntersectBLAS(ray, node.Data[i], bestHit);
+                }
             }
         }
     } while (top > 0);
@@ -424,8 +426,7 @@ float4 Trace(float2 pixel, Ray ray) // populate bestHit
     for (int i = 0; i < 2 /* max num reflections */; i++)
     {
         RayHit hit = CreateRayHit();
-        IntersectBLAS(ray,0, hit);
-        // IntersectTLAS(ray, hit);
+        IntersectTLAS(ray, hit);
         // ORDER MATTERS! energy between hit point and origin.
         // multiply energy at current ray path with light emitted at hit point
         result += ray.energy * Shade(pixel, ray, hit);
