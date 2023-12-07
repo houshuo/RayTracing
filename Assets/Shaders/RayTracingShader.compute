@@ -271,7 +271,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     
     float4x4 worldToLocal = _WorldToLocalMatrices[index];
     Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
-    
+
     int4 stack[MAX_BVH_STACK_INT4];
     int top = 0;
     stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, 1);
@@ -281,22 +281,36 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         top--;
         int topIndex = GetInt4ByIndex(stack[top >> 2], top & 4);
         BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
-        float4 hitDistance;
-        bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance, hitDistance);
-        [unroll]
-        for (int i = 0; i < 4; i++)
+        if(node.Flags == 0)
         {
-            if(node.Data[i] <= 0 || !hitMask[i])
-                continue;
-            if (node.Flags != 0 && node.Data[i] == -1)
+            float4 hitDistance;
+            bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance, hitDistance);
+            [unroll]
+            for (int i = 0; i < 4; i++)
             {
-
-                int3 triangleIndex = _Triangles[node.Data[i] + _TrianglesOffsets[index]];
+                int childNodeIndex = node.Data[i];
+                if(childNodeIndex == 0 || !hitMask[i])
+                    continue;
+                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, childNodeIndex);
+                top++;
+            }
+        }
+        else
+        {
+            [unroll]
+            for (int i = 0; i < 4; i++)
+            {
+                int childNodeIndex = node.Data[i];
+                if(childNodeIndex == -1)
+                    continue;
+                
+                int3 triangleIndex = _Triangles[childNodeIndex + _TrianglesOffsets[index]];
+                int vertexOffset = _VerticesOffsets[index];
                 Vertex
-                    v0 = _Vertices[triangleIndex.x + _VerticesOffsets[index]],
-                    v1 = _Vertices[triangleIndex.y + _VerticesOffsets[index]],
-                    v2 = _Vertices[triangleIndex.z + _VerticesOffsets[index]];
-
+                    v0 = _Vertices[triangleIndex.x + vertexOffset],
+                    v1 = _Vertices[triangleIndex.y + vertexOffset],
+                    v2 = _Vertices[triangleIndex.z + vertexOffset];
+                
                 Trisect tri = CreateTrisect();
                 if (Trisection(localRay, v0.position, v1.position, v2.position, tri))
                 {
@@ -304,11 +318,11 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                     {
                         bestHit.distance = tri.t;
                         bestHit.position = localRay.origin + tri.t * localRay.direction;
-
+                
                         // interpolate normals
                         float w = 1 - tri.u - tri.v;
                         bestHit.normal = (tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal);
-
+                
                         // get mesh mat
                         TriMeshMaterial triMat = _TriMeshMats[index];
                         bestHit.albedo = triMat.albedo;
@@ -317,13 +331,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                     }
                 }
             }
-            else
-            {
-                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, node.Data[i]);
-                top++;
-            }
         }
-        
     } while (top > 0);
 }
 
@@ -343,38 +351,24 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
         [unroll]
         for (int i = 0; i < 4; i++)
         {
-            if(node.Data[i] <= 0 || !hitMask[i])
+            if(!hitMask[i])
                 continue;
-            if (node.Flags != 0)
+            int childNodeIndex = node.Data[i];
+            if((node.Flags == 0 && childNodeIndex == 0 ||
+                (node.Flags == 1 && childNodeIndex == -1)))
+                    continue;
+            BoundingVolumeHierarchyNode childNode = _TLAS[childNodeIndex];
+            if (childNode.Flags == 1)
             {
-                bestHit.distance = 1;
-                // bestHit.position = ray.origin + hitDistance[i] * ray.direction;
-                //
-                // // interpolate normals
-                // bestHit.normal = float3(0, 1, 0);
-                //
-                // // get mesh mat
-                // TriMeshMaterial triMat = _TriMeshMats[node.Data[i]];
-                // bestHit.albedo = triMat.albedo;
-                // bestHit.specular = triMat.specular;
-                // bestHit.emission = triMat.emission;
-                
-                // IntersectBLAS(ray, node.Data[i], bestHit);
+                IntersectBLAS(ray, childNodeIndex, bestHit);
             }
             else
             {
-                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, node.Data[i]);
+                stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 4, childNodeIndex);
                 top++;
             }
         }
     } while (top > 0);
-}
-
-RayHit Trace(Ray ray) // populate bestHit
-{
-    RayHit bestHit = CreateRayHit();
-    IntersectTLAS(ray, bestHit);
-    return bestHit;
 }
 
 float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
@@ -418,6 +412,25 @@ float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
     }
 }
 
+float4 Trace(float2 pixel, Ray ray) // populate bestHit
+{
+    float3 result = float3(0, 0, 0);
+    [unroll]
+    for (int i = 0; i < 2 /* max num reflections */; i++)
+    {
+        RayHit hit = CreateRayHit();
+        IntersectBLAS(ray,0, hit);
+        // IntersectTLAS(ray, hit);
+        // ORDER MATTERS! energy between hit point and origin.
+        // multiply energy at current ray path with light emitted at hit point
+        result += ray.energy * Shade(pixel, ray, hit);
+        // then update ray energy to account attenuation at hit point
+        if (!any(ray.energy))
+            break;
+    }
+    return float4(result, 1);
+}
+
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
@@ -433,18 +446,5 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     Ray ray = CreateCameraRay(uv);  
     
     // Path Trace and shade
-    float3 result = float3(0, 0, 0);
-    [unroll]
-    for (int i = 0; i < 2 /* max num reflections */; i++)
-    {
-        RayHit hit = Trace(ray);
-        // ORDER MATTERS! energy between hit point and origin.
-        // multiply energy at current ray path with light emitted at hit point
-        result += ray.energy * Shade(id.xy, ray, hit);
-        // then update ray energy to account attenuation at hit point
-        if (!any(ray.energy))
-            break;
-    }
-    
-    Result[id.xy] = float4(result, 1);
+    Result[id.xy] = Trace(id.xy, ray);
 }
