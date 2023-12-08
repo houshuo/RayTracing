@@ -11,9 +11,9 @@ namespace Script.RayTracing
     
     public struct RayTraceMaterial
     {
-        public Color albedo;
-        public Color specular;
-        public Color emission;
+        public Vector4 albedo;
+        public Vector4 specular;
+        public Vector4 emission;
     }
     
     public struct FrameCBuffer

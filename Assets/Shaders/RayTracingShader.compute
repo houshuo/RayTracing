@@ -109,9 +109,9 @@ StructuredBuffer<int> _TrianglesOffsets;
 StructuredBuffer<int3> _Triangles;
 //Per Object Property
 struct TriMeshMaterial {
-    float3 albedo;
-    float3 specular;
-    float3 emission;
+    float4 albedo;
+    float4 specular;
+    float4 emission;
 };
 StructuredBuffer<TriMeshMaterial> _TriMeshMats;
 StructuredBuffer<float4x4> _WorldToLocalMatrices;
@@ -323,7 +323,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
                     
                             // interpolate normals
                             float w = 1 - tri.u - tri.v;
-                            bestHit.normal = mul(localToWorld, float4((tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal), 0)).xyz;
+                            bestHit.normal = normalize(mul(localToWorld, float4((tri.u*v1.normal) + (tri.v * v2.normal) + (w * v0.normal), 0)).xyz);
                     
                             // get mesh mat
                             bestHit.albedo = triMat.albedo;
