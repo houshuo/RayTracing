@@ -15,7 +15,7 @@ namespace Script.RayTracing
     {
         public void OnCreate(ref SystemState state)
         {
-            state.Enabled = false;
+            // state.Enabled = false;
         }
 
         // [BurstCompile]
@@ -35,13 +35,13 @@ namespace Script.RayTracing
             
             var TLASNodes = buildAccelerateStructureSystem.TLASBuffer;
             DrawBVH(TLASNodes, 0, float4x4.identity);
-            for (int i = 0; i < buildAccelerateStructureSystem.ObjectsCount; i++)
-            {
-                DrawBVHTriangle(buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer[i],buildAccelerateStructureSystem.ObjectsBVHBuffer, 
-                    buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsTrianglesBuffer,
-                    buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsVerticesBuffer,
-                    buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer[i]);
-            }
+            // for (int i = 0; i < buildAccelerateStructureSystem.ObjectsCount; i++)
+            // {
+            //     DrawBVHTriangle(buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer[i],buildAccelerateStructureSystem.ObjectsBVHBuffer, 
+            //         buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsTrianglesBuffer,
+            //         buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer[i], buildAccelerateStructureSystem.ObjectsVerticesBuffer,
+            //         buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer[i]);
+            // }
         }
 
         private static void DrawAABB(Aabb bbox, Color c, float4x4 localToWorld)

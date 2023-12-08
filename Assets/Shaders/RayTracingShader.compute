@@ -253,7 +253,7 @@ bool4 Raycast(FourTransposedAabbs aabbs, Ray ray, float maxFraction)
     float4 nearMax = max(max(max(nearX, nearY), nearZ), 0);
     float4 farMin = min(min(min(farX, farY), farZ), maxFraction);
     
-    return (nearMax <= farMin) & (lx <= hx);
+    return nearMax <= farMin;
 }
 
 inline int4 SetInt4ByIndex(int4 value4, int index, int value)
@@ -337,8 +337,9 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
     } while (top > 0);
 }
 
-void IntersectTLAS(Ray ray, inout RayHit bestHit)
+RayHit IntersectTLAS(Ray ray)
 {
+    RayHit bestHit = CreateRayHit();
     int4 stack[MAX_TLAS_STACK_INT4];
     int top = 0;
     stack[top >> 2] = SetInt4ByIndex(stack[top >> 2], top & 3, 1);
@@ -370,6 +371,8 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
             }
         }
     } while (top > 0);
+
+    return bestHit;
 }
 
 float3 Shade(inout Ray ray, inout RayHit hit)
@@ -404,15 +407,19 @@ float4 Trace(float2 pixel, Ray ray) // populate bestHit
     float3 result = float3(0, 0, 0);
     for (int i = 0; i < _ReflectNum /* max num reflections */; i++)
     {
-        RayHit hit = CreateRayHit();
-        IntersectTLAS(ray, hit);
+        RayHit hit = IntersectTLAS(ray);
         // ORDER MATTERS! energy between hit point and origin.
         // multiply energy at current ray path with light emitted at hit point
         result += ray.energy * Shade(ray, hit);
         // then update ray energy to account attenuation at hit point
         if (!any(ray.energy))
             break;
+        ray = CreateRay(hit.position, ray.direction);
     }
+    // RayHit hit = IntersectTLAS(ray);
+    // Ray reflectionRay = CreateRay(hit.position, reflect(ray.direction, hit.normal));
+    // hit = IntersectTLAS(reflectionRay);
+    // result = hit.emission;
     return float4(result, 1);
 }
 
