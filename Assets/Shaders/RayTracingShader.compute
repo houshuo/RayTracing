@@ -372,7 +372,7 @@ void IntersectTLAS(Ray ray, inout RayHit bestHit)
     } while (top > 0);
 }
 
-float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
+float3 Shade(inout Ray ray, inout RayHit hit)
 {
     if (hit.distance < 1.#INF)
     {
@@ -382,24 +382,10 @@ float3 Shade(float2 pixel, inout Ray ray, inout RayHit hit)
         float diffChance = energy(hit.albedo);
         float sum = specChance + diffChance;
         specChance /= sum;
-        diffChance /= sum;
-        // Roulette-select the ray's path
-        float roulette = rand(pixel);
-        if (roulette < specChance)
-        {
-            // Specular reflection
-            ray.origin = hit.position + hit.normal * 0.001f;
-            ray.direction = reflect(ray.direction, hit.normal);
-            ray.energy *= (1.0f / specChance) * hit.specular * sdot(hit.normal, ray.direction);
-        }
-        else
-        {
-            // Diffuse reflection
-            ray.origin = hit.position + hit.normal * 0.001f;
-            ray.direction = SampleHemisphere(pixel, hit.normal);
-            ray.energy *= (1.0f / diffChance) * 2 * hit.albedo * sdot(hit.normal, ray.direction);
-        }
-
+        // Specular reflection
+        ray.origin = hit.position + hit.normal * 0.001f;
+        ray.direction = reflect(ray.direction, hit.normal);
+        ray.energy *= (1.0f / specChance) * hit.specular * sdot(hit.normal, ray.direction);
         return hit.emission;
     }
     else
@@ -422,7 +408,7 @@ float4 Trace(float2 pixel, Ray ray) // populate bestHit
         IntersectTLAS(ray, hit);
         // ORDER MATTERS! energy between hit point and origin.
         // multiply energy at current ray path with light emitted at hit point
-        result += ray.energy * Shade(pixel, ray, hit);
+        result += ray.energy * Shade(ray, hit);
         // then update ray energy to account attenuation at hit point
         if (!any(ray.energy))
             break;

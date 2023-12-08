@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -89,8 +90,8 @@ namespace Script.RayTracing
                         {
                             CameraInverseProjection = camera.projectionMatrix.inverse,
                             CameraToWorld = camera.cameraToWorldMatrix,
-                            PixelOffset = new Vector2(Random.value, Random.value),
-                            Seed = Random.value,
+                            PixelOffset = new float2(0, 0), //new Vector2(Random.value, Random.value),
+                            Seed = UnityEngine.Random.value,
                             ReflectionNum = pass.settings.ReflectionNum
                         };
                         var cBufferArray = pass.FrameConsts.BeginWrite<FrameCBuffer>(0, 1);
