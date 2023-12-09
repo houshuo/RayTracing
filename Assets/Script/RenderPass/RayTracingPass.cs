@@ -32,22 +32,7 @@ namespace Script.RayTracing
         public RayTraceSettings settings = new RayTraceSettings();
         //Constant Buffer
         private ComputeBuffer FrameConsts;
-        //PerObjects BVH
-        private ComputeBuffer ObjectsBVHOffsetBuffer;
-        private ComputeBuffer ObjectsBVHBuffer;
-        //PerObjects Vertices
-        private ComputeBuffer ObjectsVerticesOffsetBuffer;
-        private ComputeBuffer ObjectsVerticesBuffer;
-        //PerObjects Triangle Indices
-        private ComputeBuffer ObjectsTrianglesOffsetBuffer;
-        private ComputeBuffer ObjectsTrianglesBuffer;
-        //PerObjects Properties
-        private ComputeBuffer ObjectsMaterialBuffer;
-        private ComputeBuffer ObjectsWorldToLocalBuffer;
-        private ComputeBuffer ObjectsLocalToWorldBuffer;
-        //TLAS Buffer
-        private ComputeBuffer TLASBuffer;
-
+        
         class CustomRenderPass : ScriptableRenderPass
         {
             public RayTracingPass pass;
@@ -76,60 +61,47 @@ namespace Script.RayTracing
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 CommandBuffer cmd = CommandBufferPool.Get(profilerTag);
-                var buildAccelerateStructureSystemHandle = World.DefaultGameObjectInjectionWorld.GetExistingSystem<BuildAccelerateStructureSystem>();
-                if (buildAccelerateStructureSystemHandle != SystemHandle.Null)
+
+                var buildAccelerateStructureSystem =
+                    World.DefaultGameObjectInjectionWorld.GetExistingSystemManaged<BuildAccelerateStructureSystem>();
+                if (buildAccelerateStructureSystem != null && buildAccelerateStructureSystem.ObjectsCount > 0)
                 {
-                    var buildAccelerateStructureSystem =
-                        World.DefaultGameObjectInjectionWorld.Unmanaged.GetUnsafeSystemRef<BuildAccelerateStructureSystem>(
-                            buildAccelerateStructureSystemHandle);
-                    if (buildAccelerateStructureSystem.ObjectsCount > 0)
+                    // Set the target and dispatch the compute shader
+                    Camera camera = renderingData.cameraData.camera;
+                    FrameCBuffer cbuffer = new FrameCBuffer()
                     {
-                        // Set the target and dispatch the compute shader
-                        Camera camera = renderingData.cameraData.camera;
-                        FrameCBuffer cbuffer = new FrameCBuffer()
-                        {
-                            CameraInverseProjection = camera.projectionMatrix.inverse,
-                            CameraToWorld = camera.cameraToWorldMatrix,
-                            PixelOffset = new float2(0, 0), //new Vector2(Random.value, Random.value),
-                            Seed = UnityEngine.Random.value,
-                            ReflectionNum = pass.settings.ReflectionNum
-                        };
-                        var cBufferArray = pass.FrameConsts.BeginWrite<FrameCBuffer>(0, 1);
-                        cBufferArray[0] = cbuffer;
-                        pass.FrameConsts.EndWrite<FrameCBuffer>(1);
-                        cmd.SetComputeConstantBufferParam(pass.settings.RayTracingShader, "FrameCBuffer", pass.FrameConsts, 0, Marshal.SizeOf<FrameCBuffer>());
-                        //skybox
-                        cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
-                        //TLAS
-                        PrepareComputeBuffer(ref pass.TLASBuffer, buildAccelerateStructureSystem.TLASBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TLAS", pass.TLASBuffer);
-                        //BLAS
-                        PrepareComputeBuffer(ref pass.ObjectsBVHOffsetBuffer, buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLASOffsets", pass.ObjectsBVHOffsetBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsBVHBuffer, buildAccelerateStructureSystem.ObjectsBVHBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLAS", pass.ObjectsBVHBuffer);
-                        //Triangle Mesh
-                        PrepareComputeBuffer(ref pass.ObjectsVerticesOffsetBuffer, buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", pass.ObjectsVerticesOffsetBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsVerticesBuffer, buildAccelerateStructureSystem.ObjectsVerticesBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", pass.ObjectsVerticesBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsTrianglesOffsetBuffer, buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", pass.ObjectsTrianglesOffsetBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsTrianglesBuffer, buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", pass.ObjectsTrianglesBuffer);
-                        //Per Object Property
-                        PrepareComputeBuffer(ref pass.ObjectsMaterialBuffer, buildAccelerateStructureSystem.ObjectsMaterialBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", pass.ObjectsMaterialBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsWorldToLocalBuffer, buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", pass.ObjectsWorldToLocalBuffer);
-                        PrepareComputeBuffer(ref pass.ObjectsLocalToWorldBuffer, buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer);
-                        cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_LocalToWorldMatrices", pass.ObjectsLocalToWorldBuffer);
-                        //Output
-                        cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
-                        //Dispatch
-                        cmd.DispatchCompute(pass.settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
-                    }
+                        CameraInverseProjection = camera.projectionMatrix.inverse,
+                        CameraToWorld = camera.cameraToWorldMatrix,
+                        PixelOffset = new float2(0, 0), //new Vector2(Random.value, Random.value),
+                        Seed = UnityEngine.Random.value,
+                        ReflectionNum = pass.settings.ReflectionNum
+                    };
+                    var cBufferArray = pass.FrameConsts.BeginWrite<FrameCBuffer>(0, 1);
+                    cBufferArray[0] = cbuffer;
+                    pass.FrameConsts.EndWrite<FrameCBuffer>(1);
+                    cmd.SetComputeConstantBufferParam(pass.settings.RayTracingShader, "FrameCBuffer", pass.FrameConsts, 0, Marshal.SizeOf<FrameCBuffer>());
+                    //skybox
+                    cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "_SkyboxTexture", pass.settings.SkyBoxTextures);
+                    //TLAS
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TLAS", buildAccelerateStructureSystem.TLASBuffer);
+                    //BLAS
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLASOffsets", buildAccelerateStructureSystem.ObjectsBVHOffsetBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_BLAS", buildAccelerateStructureSystem.ObjectsBVHBuffer);
+                    //Triangle Mesh
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_VerticesOffsets", buildAccelerateStructureSystem.ObjectsVerticesOffsetBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Vertices", buildAccelerateStructureSystem.ObjectsVerticesBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
+                    //Per Object Property
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", buildAccelerateStructureSystem.ObjectsMaterialBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_LocalToWorldMatrices", buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer);
+                    //Output
+                    cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
+                    //Dispatch
+                    cmd.DispatchCompute(pass.settings.RayTracingShader, 0, RTWidth, RTHeight, 1);
                 }
+                
                 
                 cmd.Blit(ShaderIDs.RayTracingResult, source); 
                 context.ExecuteCommandBuffer(cmd);
@@ -166,43 +138,11 @@ namespace Script.RayTracing
         protected override void Dispose(bool disposing)
         {
             if (disposing) return;
-            DestroyComputeBuffer(ref ObjectsBVHOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsBVHBuffer);
-            DestroyComputeBuffer(ref ObjectsVerticesOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsVerticesBuffer);
-            DestroyComputeBuffer(ref ObjectsTrianglesOffsetBuffer);
-            DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
-            DestroyComputeBuffer(ref ObjectsMaterialBuffer);
-            DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
-            DestroyComputeBuffer(ref ObjectsLocalToWorldBuffer);
-            DestroyComputeBuffer(ref TLASBuffer);
-            DestroyComputeBuffer(ref FrameConsts);
-        }
-        
-        private static void PrepareComputeBuffer<T>(ref ComputeBuffer buffer, in NativeArray<T> array) where T : struct
-        {
-            if (buffer != null && (buffer.stride != Marshal.SizeOf<T>() || buffer.count < array.Length))
+            if(FrameConsts != null)
             {
-                buffer.Dispose();
-                buffer = null;
-            }
-            
-            if (buffer == null)
-            {
-                buffer = new ComputeBuffer(array.Length, Marshal.SizeOf<T>(), ComputeBufferType.Structured, ComputeBufferMode.SubUpdates);
-            }
-            
-            var bufferArray = buffer.BeginWrite<T>(0, array.Length);
-            NativeArray<T>.Copy(array, bufferArray, array.Length);
-            buffer.EndWrite<T>(array.Length);
-        }
-
-        private static void DestroyComputeBuffer(ref ComputeBuffer buffer)
-        {
-            if (buffer == null)
-                return;
-            buffer.Dispose();
-            buffer = null;
+                FrameConsts.Dispose();
+                FrameConsts = null;
+            };
         }
     }
 }

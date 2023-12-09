@@ -1,60 +1,53 @@
-﻿using Unity.Burst;
+﻿using System.Runtime.InteropServices;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
+using Unity.VisualScripting;
+using UnityEngine;
 
 namespace Script.RayTracing
 {
     [UpdateInGroup(typeof(PresentationSystemGroup))]
-    public partial struct BuildAccelerateStructureSystem : ISystem
+    public partial class BuildAccelerateStructureSystem : SystemBase
     {
         //TLAS
         private TopLevelAccelerateStructure TLAS;
-
-        public NativeArray<BoundingVolumeHierarchy.Node> TLASBuffer
-        {
-            get { return TLAS.Nodes; }
-        }
         
-        public int TLASNodeCount
-        {
-            get { return TLAS.NodeCount; }
-        }
-
-        public int ObjectsCount;
+        public int ObjectsCount { private set; get; }
         //PerObjects BVH
-        public NativeArray<int> ObjectsBVHOffsetBuffer;
-        public NativeArray<BoundingVolumeHierarchy.Node> ObjectsBVHBuffer;
+        public ComputeBuffer ObjectsBVHOffsetBuffer;
+        public ComputeBuffer ObjectsBVHBuffer;
         //PerObjects Vertices
-        public NativeArray<int> ObjectsVerticesOffsetBuffer;
-        public NativeArray<Vertex> ObjectsVerticesBuffer;
+        public ComputeBuffer ObjectsVerticesOffsetBuffer;
+        public ComputeBuffer ObjectsVerticesBuffer;
         //PerObjects Triangle Indices
-        public NativeArray<int> ObjectsTrianglesOffsetBuffer;
-        public NativeArray<int3> ObjectsTrianglesBuffer;
+        public ComputeBuffer ObjectsTrianglesOffsetBuffer;
+        public ComputeBuffer ObjectsTrianglesBuffer;
         //PerObjects Properties
-        public NativeArray<RayTraceMaterial> ObjectsMaterialBuffer;
-        public NativeArray<float4x4> ObjectsWorldToLocalBuffer;
-        public NativeArray<float4x4> ObjectsLocalToWorldBuffer;
+        public ComputeBuffer ObjectsMaterialBuffer;
+        public ComputeBuffer ObjectsWorldToLocalBuffer;
+        public ComputeBuffer ObjectsLocalToWorldBuffer;
+        //TLAS Buffer
+        public ComputeBuffer TLASBuffer;
         
-        [BurstCompile]
-        public void OnCreate(ref SystemState state)
+        protected override void OnCreate()
         {
             TLAS = new TopLevelAccelerateStructure();
             TLAS.Init();
         }
         
-        // [BurstCompile]
-        public void OnUpdate(ref SystemState state)
+        protected override unsafe void OnUpdate()
         {
             //Query RayTraceable
             EntityQuery rayTraceableQuery = SystemAPI.QueryBuilder()
                 .WithAll<RayTraceableComponent, LocalToWorld>()
                 .Build();
             var rayTraceables =
-                rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(state.WorldUpdateAllocator);
+                rayTraceableQuery.ToComponentDataArray<RayTraceableComponent>(WorldUpdateAllocator);
 
             ObjectsCount = rayTraceables.Length;
             if (ObjectsCount == 0)
@@ -64,21 +57,21 @@ namespace Script.RayTracing
             int totalBVHNodeCount = 0;
             int totalVerticesCount = 0;
             int totalTrianglesCount = 0;
-            PrepareNativeArray(ref ObjectsBVHOffsetBuffer, rayTraceables.Length);
-            PrepareNativeArray(ref ObjectsVerticesOffsetBuffer, rayTraceables.Length);
-            PrepareNativeArray(ref ObjectsTrianglesOffsetBuffer, rayTraceables.Length);
+            NativeArray<int> objectsBVHOffsetBuffer = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
+            NativeArray<int> objectsVerticesOffsetBuffer = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
+            NativeArray<int> objectsTrianglesOffsetBuffer = new NativeArray<int>(rayTraceables.Length, Allocator.TempJob);
             for(int i = 0; i < rayTraceables.Length; i++)
             {
                 var rayTraceableComponent = rayTraceables[i];
                 ref BottomLevelAccelerateStructure blas = ref rayTraceableComponent.BLAS.Value;
                 ref TriangleMesh mesh = ref rayTraceableComponent.mesh.Value;
-                ObjectsBVHOffsetBuffer[i] = totalBVHNodeCount;
+                objectsBVHOffsetBuffer[i] = totalBVHNodeCount;
                 totalBVHNodeCount += blas.Nodes.Length;
 
-                ObjectsVerticesOffsetBuffer[i] = totalVerticesCount;
+                objectsVerticesOffsetBuffer[i] = totalVerticesCount;
                 totalVerticesCount += mesh.vertices.Length;
 
-                ObjectsTrianglesOffsetBuffer[i] = totalTrianglesCount;
+                objectsTrianglesOffsetBuffer[i] = totalTrianglesCount;
                 totalTrianglesCount += mesh.triangles.Length;
             }
             
@@ -86,91 +79,104 @@ namespace Script.RayTracing
             NativeArray<Aabb> aabbs = new NativeArray<Aabb>(rayTraceables.Length, Allocator.TempJob);
             NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndices =
                 new NativeArray<BoundingVolumeHierarchy.PointAndIndex>(rayTraceables.Length, Allocator.TempJob);
-            BuildTLASJob buildTLASJob = new BuildTLASJob();
-            buildTLASJob.aabbs = aabbs;
-            buildTLASJob.pointAndIndex = pointAndIndices;
-            
-            buildTLASJob.blasBVHOffsets = ObjectsBVHOffsetBuffer;
-            PrepareNativeArray(ref ObjectsBVHBuffer, totalBVHNodeCount);
-            buildTLASJob.blasBVHArray = ObjectsBVHBuffer;
-            
-            buildTLASJob.blasVerticesOffsets = ObjectsVerticesOffsetBuffer;
-            PrepareNativeArray(ref ObjectsVerticesBuffer, totalVerticesCount);
-            buildTLASJob.blasVerticesArray = ObjectsVerticesBuffer;
-            
-            buildTLASJob.blasTriangleOffsets = ObjectsTrianglesOffsetBuffer;
-            PrepareNativeArray(ref ObjectsTrianglesBuffer, totalTrianglesCount);
-            buildTLASJob.blasTriangleArray = ObjectsTrianglesBuffer;
-            
-            PrepareNativeArray(ref ObjectsMaterialBuffer, rayTraceables.Length);
-            buildTLASJob.blasMaterials = ObjectsMaterialBuffer;
-            PrepareNativeArray(ref ObjectsWorldToLocalBuffer, rayTraceables.Length);
-            buildTLASJob.blasWorldToLocal = ObjectsWorldToLocalBuffer;
-            PrepareNativeArray(ref ObjectsLocalToWorldBuffer, rayTraceables.Length);
-            buildTLASJob.blasLocalToWorld = ObjectsLocalToWorldBuffer;
-            var jobHandle = buildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
+            PrepareBuildTLASJob prepareBuildTLASJob = new PrepareBuildTLASJob();
+            prepareBuildTLASJob.aabbs = aabbs;
+            prepareBuildTLASJob.pointAndIndex = pointAndIndices;
+            var jobHandle = prepareBuildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
             //build TLAS
             TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle).Complete();
-        }
+            //build Compute Buffer
+            BuildComputeBufferJob buildComputeBufferJob = new BuildComputeBufferJob();
+            buildComputeBufferJob.blasBVHOffsets = objectsBVHOffsetBuffer;
+            PrepareComputeBuffer(ref ObjectsBVHOffsetBuffer, sizeof(int), rayTraceables.Length);
+            buildComputeBufferJob.blasBVHOffsetsBuffer = ObjectsBVHOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsBVHBuffer, Marshal.SizeOf<BoundingVolumeHierarchy.Node>(), totalBVHNodeCount);
+            buildComputeBufferJob.blasBVHBuffer = ObjectsBVHBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, totalBVHNodeCount);
+            
+            buildComputeBufferJob.blasVerticesOffsets = objectsVerticesOffsetBuffer;
+            PrepareComputeBuffer(ref ObjectsVerticesOffsetBuffer, sizeof(int), rayTraceables.Length);
+            buildComputeBufferJob.blasVerticesOffsetsBuffer = ObjectsVerticesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsVerticesBuffer,Marshal.SizeOf<Vertex>(), totalVerticesCount);
+            buildComputeBufferJob.blasVerticesBuffer = ObjectsVerticesBuffer.BeginWrite<Vertex>(0, totalVerticesCount);
+            
+            buildComputeBufferJob.blasTriangleOffsets = objectsTrianglesOffsetBuffer;
+            PrepareComputeBuffer(ref ObjectsTrianglesOffsetBuffer, sizeof(int), rayTraceables.Length);
+            buildComputeBufferJob.blasTriangleOffsetsBuffer = ObjectsTrianglesOffsetBuffer.BeginWrite<int>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsTrianglesBuffer,Marshal.SizeOf<int3>(), totalTrianglesCount);
+            buildComputeBufferJob.blasTriangleBuffer = ObjectsTrianglesBuffer.BeginWrite<int3>(0, totalTrianglesCount);
+            
+            PrepareComputeBuffer(ref ObjectsMaterialBuffer, Marshal.SizeOf<RayTraceMaterial>(), rayTraceables.Length);
+            buildComputeBufferJob.blasMaterials = ObjectsMaterialBuffer.BeginWrite<RayTraceMaterial>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsWorldToLocalBuffer, Marshal.SizeOf<float4x4>(), rayTraceables.Length);
+            buildComputeBufferJob.blasWorldToLocal = ObjectsWorldToLocalBuffer.BeginWrite<float4x4>(0, rayTraceables.Length);
+            PrepareComputeBuffer(ref ObjectsLocalToWorldBuffer, Marshal.SizeOf<float4x4>(), rayTraceables.Length);
+            buildComputeBufferJob.blasLocalToWorld = ObjectsLocalToWorldBuffer.BeginWrite<float4x4>(0, rayTraceables.Length);
+            buildComputeBufferJob.ScheduleParallel(rayTraceableQuery, new JobHandle()).Complete();
+            
+            ObjectsBVHOffsetBuffer.EndWrite<int>(rayTraceables.Length);
+            ObjectsBVHBuffer.EndWrite<BoundingVolumeHierarchy.Node>(totalBVHNodeCount);
+            ObjectsVerticesOffsetBuffer.EndWrite<int>(rayTraceables.Length);
+            ObjectsVerticesBuffer.EndWrite<Vertex>(totalVerticesCount);
+            ObjectsTrianglesOffsetBuffer.EndWrite<int>(rayTraceables.Length);
+            ObjectsTrianglesBuffer.EndWrite<int3>(totalTrianglesCount);
+            ObjectsMaterialBuffer.EndWrite<RayTraceMaterial>(rayTraceables.Length);
+            ObjectsWorldToLocalBuffer.EndWrite<float4x4>(rayTraceables.Length);
+            ObjectsLocalToWorldBuffer.EndWrite<float4x4>(rayTraceables.Length);
 
-        [BurstCompile]
-        public void OnDestroy(ref SystemState state)
+            PrepareComputeBuffer(ref TLASBuffer, Marshal.SizeOf<BoundingVolumeHierarchy.Node>(), TLAS.NodeCount);
+            NativeArray<BoundingVolumeHierarchy.Node>.Copy(TLAS.Nodes, TLASBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, TLAS.NodeCount));
+            TLASBuffer.EndWrite<BoundingVolumeHierarchy.Node>(TLAS.NodeCount);
+        }
+        
+        protected override void OnDestroy()
         {
             TLAS.Dispose();
-            DestroyNativeArray(ref ObjectsBVHOffsetBuffer);
-            DestroyNativeArray(ref ObjectsBVHBuffer);
-            DestroyNativeArray(ref ObjectsVerticesOffsetBuffer);
-            DestroyNativeArray(ref ObjectsVerticesBuffer);
-            DestroyNativeArray(ref ObjectsTrianglesOffsetBuffer);
-            DestroyNativeArray(ref ObjectsTrianglesBuffer);
-            DestroyNativeArray(ref ObjectsMaterialBuffer);
-            DestroyNativeArray(ref ObjectsWorldToLocalBuffer);
+            DestroyComputeBuffer(ref TLASBuffer);
+            DestroyComputeBuffer(ref ObjectsBVHOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsBVHBuffer);
+            DestroyComputeBuffer(ref ObjectsVerticesOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsVerticesBuffer);
+            DestroyComputeBuffer(ref ObjectsTrianglesOffsetBuffer);
+            DestroyComputeBuffer(ref ObjectsTrianglesBuffer);
+            DestroyComputeBuffer(ref ObjectsMaterialBuffer);
+            DestroyComputeBuffer(ref ObjectsLocalToWorldBuffer);
+            DestroyComputeBuffer(ref ObjectsWorldToLocalBuffer);
         }
-
-        private static void PrepareNativeArray<T>(ref NativeArray<T> buffer, int count) where T : struct
+        
+        private static void PrepareComputeBuffer(ref ComputeBuffer buffer, int stride, int count)
         {
-            if (buffer != null && buffer.Length < count)
+            if (buffer != null && (buffer.stride != stride || buffer.count < count))
             {
                 buffer.Dispose();
+                buffer = null;
             }
             
-            if (!buffer.IsCreated)
+            if (buffer == null)
             {
-                buffer = new NativeArray<T>(count, Allocator.Persistent);
+                buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured, ComputeBufferMode.SubUpdates);
             }
         }
 
-        private static void DestroyNativeArray<T>(ref NativeArray<T> buffer) where T : struct
+        private static void DestroyComputeBuffer(ref ComputeBuffer buffer)
         {
-            if (!buffer.IsCreated)
+            if (buffer == null)
                 return;
             buffer.Dispose();
+            buffer = null;
         }
     }
     
-    // [BurstCompile]
-    public partial struct BuildTLASJob : IJobEntity
+    [BurstCompile]
+    public partial struct PrepareBuildTLASJob : IJobEntity
     {
         public NativeArray<Aabb> aabbs;
         public NativeArray<BoundingVolumeHierarchy.PointAndIndex> pointAndIndex;
-        //BVH
-        [ReadOnly] public NativeArray<int> blasBVHOffsets;
-        [NativeDisableContainerSafetyRestriction] public NativeArray<BoundingVolumeHierarchy.Node> blasBVHArray;
-        //Vertices+Normals
-        [ReadOnly] public NativeArray<int> blasVerticesOffsets;
-        [NativeDisableContainerSafetyRestriction] public NativeArray<Vertex> blasVerticesArray;
-        //Indices
-        [ReadOnly] public NativeArray<int> blasTriangleOffsets;
-        [NativeDisableContainerSafetyRestriction] public NativeArray<int3> blasTriangleArray;
-        //Per Object Properties
-        public NativeArray<RayTraceMaterial> blasMaterials;
-        public NativeArray<float4x4> blasWorldToLocal;
-        public NativeArray<float4x4> blasLocalToWorld;
+        
         void Execute([EntityIndexInQuery] int entityIndexInQuery, in LocalToWorld transform, in RayTraceableComponent rayTraceable)
         {
             ref BottomLevelAccelerateStructure blas = ref rayTraceable.BLAS.Value;
             ref TriangleMesh mesh = ref rayTraceable.mesh.Value;
-            //1.build aabbs and index for build TLAS
+            //build aabbs and index for build TLAS
             Aabb aabb = blas.Aabb;
             float3 center = aabb.Center;
             pointAndIndex[entityIndexInQuery] = new BoundingVolumeHierarchy.PointAndIndex()
@@ -193,27 +199,56 @@ namespace Script.RayTracing
             max = math.max(max, c6); min = math.min(min, c6);
             max = math.max(max, c7); min = math.min(min, c7);
             aabbs[entityIndexInQuery] = new Aabb(){Max = max, Min = min};
-            
-            //2.set blas and triangle to array by offset
-            int blasOffset = blasBVHOffsets[entityIndexInQuery];
+        }
+    }
+    
+    [BurstCompile]
+    public partial struct BuildComputeBufferJob : IJobEntity
+    {
+        //BVH
+        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasBVHOffsets;
+        public NativeArray<int> blasBVHOffsetsBuffer;
+        [NativeDisableContainerSafetyRestriction] public NativeArray<BoundingVolumeHierarchy.Node> blasBVHBuffer;
+        //Vertices+Normals
+        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasVerticesOffsets;
+        public NativeArray<int> blasVerticesOffsetsBuffer;
+        [NativeDisableContainerSafetyRestriction] public NativeArray<Vertex> blasVerticesBuffer;
+        //Indices
+        [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<int> blasTriangleOffsets;
+        public NativeArray<int> blasTriangleOffsetsBuffer;
+        [NativeDisableContainerSafetyRestriction] public NativeArray<int3> blasTriangleBuffer;
+        //Per Object Properties
+        public NativeArray<RayTraceMaterial> blasMaterials;
+        public NativeArray<float4x4> blasWorldToLocal;
+        public NativeArray<float4x4> blasLocalToWorld;
+        
+        void Execute([EntityIndexInQuery] int entityIndexInQuery, in LocalToWorld transform, in RayTraceableComponent rayTraceable)
+        {
+            ref BottomLevelAccelerateStructure blas = ref rayTraceable.BLAS.Value;
+            ref TriangleMesh mesh = ref rayTraceable.mesh.Value;
+        
+            //set blas and triangle to array by offset
+            int blasOffset = blasBVHOffsets[entityIndexInQuery]; 
+            blasBVHOffsetsBuffer[entityIndexInQuery] = blasOffset;
             for (int i = 0; i < blas.Nodes.Length; i++)
             {
-                blasBVHArray[i + blasOffset] = blas.Nodes[i];
+                blasBVHBuffer[i + blasOffset] = blas.Nodes[i];
             }
-            
+        
             int verticesOffset = blasVerticesOffsets[entityIndexInQuery];
+            blasVerticesOffsetsBuffer[entityIndexInQuery] = verticesOffset;
             for (int i = 0; i < mesh.vertices.Length; i++)
             {
-                blasVerticesArray[i + verticesOffset] = new Vertex(){position = mesh.vertices[i], normal = mesh.normals[i]};
+                blasVerticesBuffer[i + verticesOffset] = new Vertex(){position = mesh.vertices[i], normal = mesh.normals[i]};
             }
-            
+        
             int triangleOffset = blasTriangleOffsets[entityIndexInQuery];
+            blasTriangleOffsetsBuffer[entityIndexInQuery] = triangleOffset;
             for (int i = 0; i < mesh.triangles.Length; i++)
             {
-                blasTriangleArray[i + triangleOffset] = mesh.triangles[i];
+                blasTriangleBuffer[i + triangleOffset] = mesh.triangles[i];
             }
-            
-            //3.set materials and worldToLocal
+        
             blasMaterials[entityIndexInQuery] = new RayTraceMaterial()
             {
                 albedo = rayTraceable.albedo,
