@@ -410,26 +410,14 @@ float3 Shade(inout Ray ray, inout RayHit hit)
     }
 }
 
-float4 Trace(float2 pixel, Ray ray) // populate bestHit
+float4 Trace(float2 pixel, Ray cameraRay) // populate bestHit
 {
     float3 result = float3(0, 0, 0);
-    for (int i = 0; i < _ReflectNum /* max num reflections */; i++)
-    {
-        RayHit hit = IntersectTLAS(ray);
-        // ORDER MATTERS! energy between hit point and origin.
-        // multiply energy at current ray path with light emitted at hit point
-        result += ray.energy * Shade(ray, hit);
-        // then update ray energy to account attenuation at hit point
-        if (!any(ray.energy))
-            break;
-        Ray newRay = CreateRay(hit.position, ray.direction);
-        newRay.energy = ray.energy;
-        ray = newRay;
-    }
-    // RayHit hit = IntersectTLAS(ray);
-    // Ray reflectionRay = CreateRay(hit.position, reflect(ray.direction, hit.normal));
-    // hit = IntersectTLAS(reflectionRay);
-    // result = hit.emission;
+    RayHit cameraHit = IntersectTLAS(cameraRay);
+    Ray ray = CreateRay(cameraHit.position, reflect(cameraRay.direction, cameraHit.normal));
+    //Reflection Shade
+    RayHit hit = IntersectTLAS(ray);
+    result += ray.energy * Shade(ray, hit);
     return float4(result, 1);
 }
 
@@ -439,14 +427,11 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     // Get the dimensions of the RenderTexture
     uint width, height;
     Result.GetDimensions(width, height);
-    
     // Transform pixel to [-1,1] range
-        // jittered ray sample, random(0-1, 0-1) _PixelOffset
+    // jittered ray sample, random(0-1, 0-1) _PixelOffset
     float2 uv = float2((id.xy + _PixelOffset) / float2(width, height) * 2.0f - 1.0f);
-    
     // Get a ray from the UVs
-    Ray ray = CreateCameraRay(uv);  
-    
+    Ray cameraRay = CreateCameraRay(uv);
     // Path Trace and shade
-    Result[id.xy] = Trace(id.xy, ray);
+    Result[id.xy] = Trace(id.xy, cameraRay);
 }

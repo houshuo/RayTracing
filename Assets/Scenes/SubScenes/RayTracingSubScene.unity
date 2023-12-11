@@ -254,9 +254,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 872a30b4a092447f0acddabee25bf02e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  albedo: {r: 0.8584906, g: 0.72305787, b: 0.68436277, a: 1}
-  specular: {r: 0.15, g: 0.15, b: 0.15, a: 0}
-  emission: {r: 0.009433985, g: 0.009433985, b: 0.009433985, a: 0}
 --- !u!1 &5508684318592076384
 GameObject:
   m_ObjectHideFlags: 0
@@ -289,9 +286,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 872a30b4a092447f0acddabee25bf02e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  albedo: {r: 0.11053756, g: 0.34486413, b: 0.8679245, a: 0}
-  specular: {r: 0.8018868, g: 0.75271446, b: 0.75271446, a: 0}
-  emission: {r: 0.12001601, g: 0.24657385, b: 0.8207547, a: 0}
 --- !u!33 &5508684318592076388
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -391,9 +385,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 872a30b4a092447f0acddabee25bf02e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  albedo: {r: 0.8113208, g: 0.7993099, b: 0.6161446, a: 0}
-  specular: {r: 0.8490566, g: 0.8490566, b: 0.8490566, a: 0}
-  emission: {r: 0.8113208, g: 0.801854, b: 0.6314525, a: 0}
 --- !u!1 &5508684318613168921
 GameObject:
   m_ObjectHideFlags: 0
@@ -600,9 +591,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 872a30b4a092447f0acddabee25bf02e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  albedo: {r: 0.23633854, g: 0.4433962, b: 0.28872666, a: 1}
-  specular: {r: 0.8113208, g: 0.8113208, b: 0.8113208, a: 0}
-  emission: {r: 0.53039336, g: 0.8207547, b: 0.56422985, a: 1}
 --- !u!1 &5508684319571185447
 GameObject:
   m_ObjectHideFlags: 0

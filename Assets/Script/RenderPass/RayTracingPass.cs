@@ -28,6 +28,7 @@ namespace Script.RayTracing
             public ComputeShader RayTracingShader;
             public Texture SkyBoxTextures;
             public float RTDownScaling;
+            public Material AddMaterial;
         }
         public RayTraceSettings settings = new RayTraceSettings();
         //Constant Buffer
@@ -101,7 +102,7 @@ namespace Script.RayTracing
                 }
                 
                 
-                cmd.Blit(ShaderIDs.RayTracingResult, source); 
+                cmd.Blit(ShaderIDs.RayTracingResult, source, pass.settings.AddMaterial); 
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
                 CommandBufferPool.Release(cmd);
