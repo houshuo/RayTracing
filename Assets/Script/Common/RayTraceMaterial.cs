@@ -15,6 +15,15 @@ namespace Script.RayTracing
         public Vector4 specular;
         public Vector4 emission;
     }
+
+    public struct PerObjectProperty
+    {
+        public int BLASIndex;
+        public RayTraceMaterial Material;
+        public float4x4 WorldToLocal;
+        public float4x4 LocalToWorld;
+    }
+    
     
     public struct FrameCBuffer
     {

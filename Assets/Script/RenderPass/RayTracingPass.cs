@@ -93,9 +93,7 @@ namespace Script.RayTracing
                     cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TrianglesOffsets", buildAccelerateStructureSystem.ObjectsTrianglesOffsetBuffer);
                     cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_Triangles", buildAccelerateStructureSystem.ObjectsTrianglesBuffer);
                     //Per Object Property
-                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_TriMeshMats", buildAccelerateStructureSystem.ObjectsMaterialBuffer);
-                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_WorldToLocalMatrices", buildAccelerateStructureSystem.ObjectsWorldToLocalBuffer);
-                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_LocalToWorldMatrices", buildAccelerateStructureSystem.ObjectsLocalToWorldBuffer);
+                    cmd.SetComputeBufferParam(pass.settings.RayTracingShader, 0, "_ObjectsProperty", buildAccelerateStructureSystem.ObjectsPropertyBuffer);
                     //Output
                     cmd.SetComputeTextureParam(pass.settings.RayTracingShader, 0, "Result", ShaderIDs.RayTracingResult); 
                     //Dispatch

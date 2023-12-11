@@ -108,14 +108,20 @@ StructuredBuffer<Vertex> _Vertices;
 StructuredBuffer<int> _TrianglesOffsets;
 StructuredBuffer<int3> _Triangles;
 //Per Object Property
-struct TriMeshMaterial {
+struct RayTraceMaterial
+{
     float4 albedo;
     float4 specular;
     float4 emission;
 };
-StructuredBuffer<TriMeshMaterial> _TriMeshMats;
-StructuredBuffer<float4x4> _WorldToLocalMatrices;
-StructuredBuffer<float4x4> _LocalToWorldMatrices;
+struct ObjectProperty
+{
+    int BLASIndex;
+    RayTraceMaterial Material;
+    float4x4 WorldToLocal;
+    float4x4 LocalToWorld;
+};
+StructuredBuffer<ObjectProperty> _ObjectsProperty;
 
 /*=======Ray=======*/
 struct Ray
@@ -270,12 +276,14 @@ inline int GetInt4ByIndex(int4 value4, int index)
 
 void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
 {
-    int blasOffset = _BLASOffsets[index];
-    int triangleOffset = _TrianglesOffsets[index];
-    int vertexOffset = _VerticesOffsets[index];
-    TriMeshMaterial triMat = _TriMeshMats[index];
-    float4x4 worldToLocal = _WorldToLocalMatrices[index];
-    float4x4 localToWorld = _LocalToWorldMatrices[index];
+    ObjectProperty property = _ObjectsProperty[index];
+    int blasIndex = property.BLASIndex;
+    int blasOffset = _BLASOffsets[blasIndex];
+    int triangleOffset = _TrianglesOffsets[blasIndex];
+    int vertexOffset = _VerticesOffsets[blasIndex];
+    RayTraceMaterial triMat = property.Material;
+    float4x4 worldToLocal = property.WorldToLocal;
+    float4x4 localToWorld = property.LocalToWorld;
     Ray localRay = CreateRay(mul(worldToLocal, float4(ray.origin, 1)).xyz, mul(worldToLocal, float4(ray.direction, 0)).xyz);
 
     int4 stack[MAX_BLAS_STACK_INT4];
@@ -414,7 +422,9 @@ float4 Trace(float2 pixel, Ray ray) // populate bestHit
         // then update ray energy to account attenuation at hit point
         if (!any(ray.energy))
             break;
-        ray = CreateRay(hit.position, ray.direction);
+        Ray newRay = CreateRay(hit.position, ray.direction);
+        newRay.energy = ray.energy;
+        ray = newRay;
     }
     // RayHit hit = IntersectTLAS(ray);
     // Ray reflectionRay = CreateRay(hit.position, reflect(ray.direction, hit.normal));
