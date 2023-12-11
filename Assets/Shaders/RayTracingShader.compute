@@ -383,7 +383,7 @@ RayHit IntersectTLAS(Ray ray)
     return bestHit;
 }
 
-float3 Shade(inout Ray ray, inout RayHit hit)
+float3 Shade(Ray ray, RayHit hit)
 {
     if (hit.distance < 1.#INF)
     {
@@ -414,11 +414,18 @@ float4 Trace(float2 pixel, Ray cameraRay) // populate bestHit
 {
     float3 result = float3(0, 0, 0);
     RayHit cameraHit = IntersectTLAS(cameraRay);
-    Ray ray = CreateRay(cameraHit.position, reflect(cameraRay.direction, cameraHit.normal));
-    //Reflection Shade
-    RayHit hit = IntersectTLAS(ray);
-    result += ray.energy * Shade(ray, hit);
-    return float4(result, 1);
+    if (cameraHit.distance < 1.#INF)
+    {
+        Ray ray = CreateRay(cameraHit.position, reflect(cameraRay.direction, cameraHit.normal));
+        //Reflection Shade
+        RayHit hit = IntersectTLAS(ray);
+        result += ray.energy * Shade(ray, hit);
+        return float4(result, 1);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 [numthreads(8,8,1)]
