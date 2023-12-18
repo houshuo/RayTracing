@@ -63,10 +63,7 @@ namespace Script.RayTracing
             prepareBuildTLASJob.pointAndIndex = pointAndIndices;
             var jobHandle = prepareBuildTLASJob.ScheduleParallel(rayTraceableQuery, new JobHandle());
             //build TLAS
-            TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle).Complete();
-            PrepareComputeBuffer(ref TLASBuffer, Marshal.SizeOf<BoundingVolumeHierarchy.Node>(), TLAS.NodeCount);
-            NativeArray<BoundingVolumeHierarchy.Node>.Copy(TLAS.Nodes, TLASBuffer.BeginWrite<BoundingVolumeHierarchy.Node>(0, TLAS.NodeCount));
-            TLASBuffer.EndWrite<BoundingVolumeHierarchy.Node>(TLAS.NodeCount);
+            jobHandle = TLAS.ScheduleBuildTree(aabbs, pointAndIndices, jobHandle);
             
             //BLAS
             //Give individual BLAS index
@@ -139,7 +136,7 @@ namespace Script.RayTracing
             ObjectsTrianglesOffsetBuffer.SetData(objectsTrianglesOffsetBuffer);
             PrepareComputeBuffer(ref ObjectsTrianglesBuffer,Marshal.SizeOf<int3>(), totalTrianglesCount);
             buildComputeBufferJob.blasTriangleBuffer = new NativeArray<int3>(totalTrianglesCount, Allocator.TempJob);
-            jobHandle = buildComputeBufferJob.Schedule(blasCount,1, new JobHandle());
+            jobHandle = buildComputeBufferJob.Schedule(blasCount,32, jobHandle);
 
             BuildPerObjectPropertyComputeBufferJob buildPerObjectPropertyComputeBufferJob =
                 new BuildPerObjectPropertyComputeBufferJob();
@@ -147,8 +144,10 @@ namespace Script.RayTracing
             PrepareComputeBuffer(ref ObjectsPropertyBuffer, Marshal.SizeOf<PerObjectProperty>(), rayTraceableMaterials.Length);
             buildPerObjectPropertyComputeBufferJob.objectsProperty = new NativeArray<PerObjectProperty>(rayTraceableMaterials.Length, Allocator.TempJob);
             buildPerObjectPropertyComputeBufferJob.ScheduleParallel(rayTraceableQuery, jobHandle).Complete();
+            //TLAS
+            PrepareComputeBuffer(ref TLASBuffer, Marshal.SizeOf<BoundingVolumeHierarchy.Node>(), TLAS.NodeCount);
+            TLASBuffer.SetData(TLAS.Nodes, 0, 0, TLAS.NodeCount);
             //BLAS
-            
             ObjectsBVHBuffer.SetData(buildComputeBufferJob.blasBVHBuffer);
             buildComputeBufferJob.blasBVHBuffer.Dispose();
             ObjectsVerticesBuffer.SetData(buildComputeBufferJob.blasVerticesBuffer);
@@ -235,7 +234,7 @@ namespace Script.RayTracing
     }
     
     [BurstCompile]
-    public partial struct BuildBLASComputeBufferJob : IJobParallelFor
+    public struct BuildBLASComputeBufferJob : IJobParallelFor
     {
         [DeallocateOnJobCompletion] [ReadOnly] public NativeArray<BlobAssetReference<BottomLevelAccelerateStructure>> BLASs;
         //BVH
