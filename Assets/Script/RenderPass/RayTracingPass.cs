@@ -131,7 +131,7 @@ namespace Script.RayTracing
         
         public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
         {
-            scriptablePass.Setup(renderer.cameraColorTarget);  // use of target after allocation
+            scriptablePass.Setup(renderer.cameraColorTargetHandle);  // use of target after allocation
         }
 
         protected override void Dispose(bool disposing)
