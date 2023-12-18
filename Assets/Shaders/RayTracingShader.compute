@@ -295,9 +295,9 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
         top--;
         int topIndex = GetInt4ByIndex(stack[top >> 2], top & 3);
         BoundingVolumeHierarchyNode node = _BLAS[topIndex + blasOffset];
+        bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
         if(node.Flags == 0) //Internal
         {
-            bool4 hitMask = Raycast(node.Bounds, localRay, bestHit.distance);
             for (int i = 0; i < 4; i++)
             {
                 int childNodeIndex = node.Data[i];
@@ -313,7 +313,7 @@ void IntersectBLAS(Ray ray, int index, inout RayHit bestHit)
             for (int i = 0; i < 4; i++)
             {
                 int triangleIndex = node.Data[i];
-                if(triangleIndex != -1)
+                if(triangleIndex != -1 && hitMask[i])
                 {                    
                     int3 aTriangle = _Triangles[triangleIndex + triangleOffset];
                     Vertex
