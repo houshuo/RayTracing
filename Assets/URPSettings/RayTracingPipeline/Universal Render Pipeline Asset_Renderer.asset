@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Active: 1
   settings:
-    ReflectionNum: 2
+    ReflectionNum: 1
     randomSeed: 323424
     RayTracingShader: {fileID: 7200000, guid: c4e6758be8dda491696a52d390b1d2bb, type: 3}
     SkyBoxTextures: {fileID: 2800000, guid: 0b3df8d6ae1c64c1694d844b999cedcb, type: 3}
-    RTDownScaling: 1.2
+    RTDownScaling: 1
     AddMaterial: {fileID: 2100000, guid: d26a2245a505118439875a947aee696a, type: 2}
 --- !u!114 &11400000
 MonoBehaviour:
